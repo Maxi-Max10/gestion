@@ -502,6 +502,13 @@ function catalog_capitalize_first(string $value): string
       border: 1px solid rgba(var(--accent-rgb), .14);
       background: linear-gradient(180deg, rgba(255,255,255,.96), rgba(244,247,251,.96));
       box-shadow: inset 0 1px 0 rgba(255,255,255,.8);
+      transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease, background .18s ease;
+    }
+    .import-dropzone.is-dragover {
+      border-color: rgba(var(--accent-rgb), .42);
+      background: linear-gradient(180deg, rgba(239,246,255,.98), rgba(255,255,255,.98));
+      box-shadow: 0 0 0 .24rem rgba(var(--accent-rgb), .12), inset 0 1px 0 rgba(255,255,255,.92);
+      transform: translateY(-1px);
     }
     .import-dropzone-head {
       display: flex;
@@ -537,6 +544,14 @@ function catalog_capitalize_first(string $value): string
       display: grid;
       gap: .75rem;
     }
+    .import-pick-zone {
+      display: grid;
+      gap: .8rem;
+      padding: 1rem;
+      border-radius: 18px;
+      border: 1px dashed rgba(var(--accent-rgb), .22);
+      background: rgba(var(--accent-rgb), .03);
+    }
     .import-input-wrap .form-control {
       min-height: 54px;
       border-radius: 16px;
@@ -553,6 +568,37 @@ function catalog_capitalize_first(string $value): string
       display: flex;
       flex-wrap: wrap;
       gap: .55rem;
+    }
+    .import-drop-hint {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+      color: rgba(17,24,39,.74);
+      font-size: .92rem;
+    }
+    .import-drop-hint strong {
+      color: var(--ink);
+      font-size: .96rem;
+    }
+    .import-file-state {
+      display: inline-flex;
+      align-items: center;
+      gap: .45rem;
+      min-height: 40px;
+      padding: .55rem .8rem;
+      border-radius: 14px;
+      border: 1px solid rgba(148,163,184,.26);
+      background: rgba(255,255,255,.88);
+      color: rgba(17,24,39,.7);
+      font-size: .9rem;
+    }
+    .import-file-state.is-ready {
+      color: var(--accent);
+      border-color: rgba(var(--accent-rgb), .24);
+      background: rgba(var(--accent-rgb), .06);
+      font-weight: 600;
     }
     .import-chip {
       display: inline-flex;
@@ -611,6 +657,11 @@ function catalog_capitalize_first(string $value): string
     .import-side .btn-primary:focus {
       color: var(--accent-dark);
       transform: translateY(-1px);
+    }
+    .import-side .btn-primary[disabled] {
+      opacity: .8;
+      transform: none;
+      cursor: wait;
     }
     .import-list {
       margin: 0;
@@ -758,11 +809,11 @@ function catalog_capitalize_first(string $value): string
           <h2 class="h5 mb-0">Importar productos desde Excel</h2>
         </div>
         <div class="card-body px-4 py-4 import-card">
-          <form method="post" action="/catalogo" enctype="multipart/form-data" class="import-grid">
+          <form method="post" action="/catalogo" enctype="multipart/form-data" class="import-grid" id="catalogImportForm">
             <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
             <input type="hidden" name="action" value="import_excel">
 
-            <div class="import-dropzone">
+            <div class="import-dropzone" id="catalogImportDropzone" tabindex="0" role="button" aria-label="Arrastrar y soltar archivo Excel para importar">
               <div class="import-dropzone-head">
                 <span class="import-icon" aria-hidden="true">
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -780,9 +831,14 @@ function catalog_capitalize_first(string $value): string
               </div>
 
               <div class="import-input-wrap">
-                <div>
+                <div class="import-pick-zone">
                   <label class="form-label fw-semibold" for="catalog_file">Archivo Excel</label>
                   <input class="form-control" id="catalog_file" name="catalog_file" type="file" accept=".xlsx,.xls,.csv" required>
+                  <div class="import-drop-hint">
+                    <strong>Arrastrá y soltá tu archivo acá</strong>
+                    <span>o hacé clic para seleccionarlo</span>
+                  </div>
+                  <div class="import-file-state" id="catalogImportFileState">Todavía no hay ningún archivo seleccionado</div>
                 </div>
                 <div class="import-chips" aria-label="Columnas esperadas">
                   <span class="import-chip">Producto</span>
@@ -1010,6 +1066,11 @@ foreach ($rows as $r) {
   const tbody = document.getElementById('catalogTbody');
   const searchForm = document.getElementById('catalogSearchForm');
   const searchInput = document.getElementById('catalogSearch');
+  const importForm = document.getElementById('catalogImportForm');
+  const importDropzone = document.getElementById('catalogImportDropzone');
+  const importFileInput = document.getElementById('catalog_file');
+  const importFileState = document.getElementById('catalogImportFileState');
+  const importSubmitBtn = importForm ? importForm.querySelector('button[type="submit"]') : null;
   const form = document.getElementById('catalogForm');
   const formQ = document.getElementById('catalogFormQ');
   const actionInput = document.getElementById('catalogAction');
@@ -1031,10 +1092,71 @@ foreach ($rows as $r) {
   const voiceFile = document.getElementById('catalogVoiceFile');
 
   const defaultVoiceLabel = voiceBtn ? (voiceBtn.textContent || 'Voz') : 'Voz';
+  const defaultImportLabel = importSubmitBtn ? (importSubmitBtn.textContent || 'Subir e importar') : 'Subir e importar';
 
   const hideMsg = (el) => { if (!el) return; el.classList.add('d-none'); el.textContent = ''; };
   const showMsg = (el, msg) => { if (!el) return; el.textContent = msg; el.classList.remove('d-none'); };
   const clearMsgs = () => { hideMsg(clientSuccess); hideMsg(clientError); };
+
+  const setImportFileState = (file) => {
+    if (!importFileState) return;
+    if (!file) {
+      importFileState.textContent = 'Todavía no hay ningún archivo seleccionado';
+      importFileState.classList.remove('is-ready');
+      return;
+    }
+    const name = String(file.name || 'archivo');
+    importFileState.textContent = 'Listo para importar: ' + name;
+    importFileState.classList.add('is-ready');
+  };
+
+  const setImportBusy = (busy) => {
+    if (importSubmitBtn) {
+      importSubmitBtn.disabled = !!busy;
+      importSubmitBtn.textContent = busy ? 'Importando...' : defaultImportLabel;
+    }
+    if (importFileInput) {
+      importFileInput.disabled = !!busy;
+    }
+    if (importDropzone) {
+      importDropzone.setAttribute('aria-busy', busy ? 'true' : 'false');
+      importDropzone.classList.toggle('is-dragover', false);
+    }
+  };
+
+  const importSelectedFile = async (file) => {
+    if (!importForm) return;
+    if (!file) {
+      throw new Error('Seleccioná un archivo Excel antes de importar.');
+    }
+
+    clearMsgs();
+    setImportBusy(true);
+
+    try {
+      const fd = new FormData(importForm);
+      fd.set('csrf_token', csrfToken());
+      fd.set('ajax', '1');
+      fd.delete('catalog_file');
+      fd.append('catalog_file', file, file.name || 'importacion.xlsx');
+
+      const resp = await postFormAction(fd);
+      if (importForm) importForm.reset();
+      setImportFileState(null);
+      showMsg(clientSuccess, resp.message || 'Importación completada.');
+
+      const rowErrors = resp && resp.result && Array.isArray(resp.result.errors)
+        ? resp.result.errors
+        : [];
+      if (rowErrors.length > 0) {
+        showMsg(clientError, rowErrors.slice(0, 6).join(' | '));
+      }
+
+      await refresh();
+    } finally {
+      setImportBusy(false);
+    }
+  };
 
   let imageObjectUrl = '';
   const clearImageObjectUrl = () => {
@@ -1534,6 +1656,81 @@ foreach ($rows as $r) {
         showMsg(clientError, err.message || String(err));
         try { searchForm.submit(); } catch (_) {}
       });
+    });
+  }
+
+  if (importFileInput) {
+    importFileInput.addEventListener('change', () => {
+      const file = importFileInput.files && importFileInput.files[0] ? importFileInput.files[0] : null;
+      setImportFileState(file);
+    });
+  }
+
+  if (importForm) {
+    importForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const file = importFileInput && importFileInput.files && importFileInput.files[0]
+        ? importFileInput.files[0]
+        : null;
+      importSelectedFile(file)
+        .catch((err) => showMsg(clientError, err && err.message ? err.message : String(err)));
+    });
+  }
+
+  if (importDropzone) {
+    const stop = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    ['dragenter', 'dragover'].forEach((eventName) => {
+      importDropzone.addEventListener(eventName, (e) => {
+        stop(e);
+        importDropzone.classList.add('is-dragover');
+      });
+    });
+
+    ['dragleave', 'dragend'].forEach((eventName) => {
+      importDropzone.addEventListener(eventName, (e) => {
+        stop(e);
+        const related = e.relatedTarget;
+        if (!related || !importDropzone.contains(related)) {
+          importDropzone.classList.remove('is-dragover');
+        }
+      });
+    });
+
+    importDropzone.addEventListener('drop', (e) => {
+      stop(e);
+      importDropzone.classList.remove('is-dragover');
+      const files = e.dataTransfer && e.dataTransfer.files ? e.dataTransfer.files : null;
+      const file = files && files[0] ? files[0] : null;
+      if (!file) return;
+
+      try {
+        if (importFileInput && typeof DataTransfer !== 'undefined') {
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          importFileInput.files = dt.files;
+        }
+      } catch (_) {}
+
+      setImportFileState(file);
+      importSelectedFile(file)
+        .catch((err) => showMsg(clientError, err && err.message ? err.message : String(err)));
+    });
+
+    importDropzone.addEventListener('click', (e) => {
+      if (!importFileInput) return;
+      if (e.target === importFileInput) return;
+      importFileInput.click();
+    });
+
+    importDropzone.addEventListener('keydown', (e) => {
+      if (!importFileInput) return;
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      importFileInput.click();
     });
   }
 
