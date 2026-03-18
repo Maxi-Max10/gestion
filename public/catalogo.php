@@ -796,6 +796,33 @@ function catalog_export_xlsx_import_format(string $sheetName, array $rows, strin
       background: rgba(255,255,255,.92);
       flex: 0 0 auto;
     }
+    .catalog-action-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .85rem;
+      margin-bottom: 1.25rem;
+    }
+    .catalog-launch-btn {
+      min-height: 52px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: .6rem;
+      padding-inline: 1.15rem;
+    }
+    .catalog-modal .modal-content {
+      border: 0;
+      border-radius: 24px;
+      overflow: hidden;
+      box-shadow: 0 30px 80px rgba(15,23,42,.18);
+    }
+    .catalog-modal .modal-header {
+      border-bottom: 1px solid rgba(15,23,42,.06);
+      background: linear-gradient(180deg, rgba(255,255,255,.96), rgba(248,250,252,.9));
+    }
+    .catalog-modal .modal-body {
+      background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,250,252,.96));
+    }
     .catalog-toast-wrap {
       position: fixed;
       top: 1rem;
@@ -994,151 +1021,174 @@ function catalog_export_xlsx_import_format(string $sheetName, array $rows, strin
       <div id="catalogClientSuccess" class="alert alert-success d-none" role="alert"></div>
       <div id="catalogClientError" class="alert alert-danger d-none" role="alert"></div>
 
-      <div class="card card-lift mb-4">
-        <div class="card-header card-header-clean bg-white px-4 py-3">
-          <p class="muted-label mb-1">Carga masiva</p>
-          <h2 class="h5 mb-0">Importar productos desde Excel</h2>
-        </div>
-        <div class="card-body px-4 py-4 import-card">
-          <form method="post" action="/catalogo" enctype="multipart/form-data" class="import-grid" id="catalogImportForm">
-            <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
-            <input type="hidden" name="action" value="import_excel">
+      <div class="catalog-action-bar">
+        <button class="btn btn-primary action-btn catalog-launch-btn" type="button" data-bs-toggle="modal" data-bs-target="#catalogImportModal">
+          Importación masiva
+        </button>
+        <button class="btn btn-outline-primary action-btn catalog-launch-btn" type="button" id="catalogOpenFormBtn" data-bs-toggle="modal" data-bs-target="#catalogProductModal">
+          Agregar o editar producto
+        </button>
+      </div>
 
-            <div class="import-dropzone" id="catalogImportDropzone" tabindex="0" role="button" aria-label="Arrastrar y soltar archivo Excel para importar">
-              <div class="import-dropzone-head">
-                <span class="import-icon" aria-hidden="true">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M14 3H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9z"/>
-                    <path d="M14 3v6h6"/>
-                    <path d="M9 14h6"/>
-                    <path d="M9 18h6"/>
-                    <path d="M10 10h1"/>
-                  </svg>
-                </span>
-                <div>
-                  <h3 class="import-title">Subí tu lista y cargá todo de una vez</h3>
-                  <p class="import-copy">Arrancá con un archivo Excel o CSV y el sistema crea o actualiza productos automáticamente según el nombre.</p>
-                </div>
-              </div>
-
-              <div class="import-input-wrap">
-                <div class="import-pick-zone">
-                  <label class="form-label fw-semibold" for="catalog_file">Archivo Excel</label>
-                  <input class="form-control" id="catalog_file" name="catalog_file" type="file" accept=".xlsx,.xls,.csv" required>
-                  <div class="import-drop-hint">
-                    <strong>Arrastrá y soltá tu archivo acá</strong>
-                    <span>o hacé clic para seleccionarlo</span>
-                  </div>
-                  <div class="import-file-state" id="catalogImportFileState">Todavía no hay ningún archivo seleccionado</div>
-                </div>
-                <div class="import-chips" aria-label="Columnas esperadas">
-                  <span class="import-chip">Producto</span>
-                  <span class="import-chip">Precio</span>
-                  <span class="import-chip">Unidad</span>
-                  <span class="import-chip">Descripción</span>
-                  <span class="import-chip">Moneda</span>
-                  <span class="import-chip">Imagen</span>
-                </div>
-                <div class="form-text">La primera fila debe traer esos títulos. Imagen es opcional y puede ser una URL pública, un nombre de archivo ya subido o una imagen incrustada en la fila del Excel.</div>
-              </div>
-            </div>
-
-            <div class="import-side">
+      <div class="modal fade catalog-modal" id="catalogImportModal" tabindex="-1" aria-labelledby="catalogImportModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+          <div class="modal-content">
+            <div class="modal-header px-4 py-3">
               <div>
-                <p class="import-side-label">Importación inteligente</p>
-                <h3 class="import-side-title">Crea nuevos y actualiza los existentes</h3>
-                <p class="import-side-copy">Si el nombre del producto ya existe en tu catálogo, se actualizan precio, moneda, unidad y descripción con los datos del archivo.</p>
+                <p class="muted-label mb-1">Carga masiva</p>
+                <h2 class="h5 mb-0" id="catalogImportModalLabel">Importar productos desde Excel</h2>
               </div>
-
-              <button type="submit" class="btn btn-primary action-btn w-100">Subir e importar</button>
-
-              <ul class="import-list" aria-label="Reglas de importación">
-                <li><span class="import-list-dot" aria-hidden="true"></span>Compatible con XLSX, XLS y CSV</li>
-                <li><span class="import-list-dot" aria-hidden="true"></span>Omite filas totalmente vacías</li>
-                <li><span class="import-list-dot" aria-hidden="true"></span>Muestra aviso si alguna fila falla</li>
-              </ul>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
-          </form>
+            <div class="modal-body px-4 py-4 import-card">
+              <form method="post" action="/catalogo" enctype="multipart/form-data" class="import-grid" id="catalogImportForm">
+                <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+                <input type="hidden" name="action" value="import_excel">
+
+                <div class="import-dropzone" id="catalogImportDropzone" tabindex="0" role="button" aria-label="Arrastrar y soltar archivo Excel para importar">
+                  <div class="import-dropzone-head">
+                    <span class="import-icon" aria-hidden="true">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 3H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9z"/>
+                        <path d="M14 3v6h6"/>
+                        <path d="M9 14h6"/>
+                        <path d="M9 18h6"/>
+                        <path d="M10 10h1"/>
+                      </svg>
+                    </span>
+                    <div>
+                      <h3 class="import-title">Subí tu lista y cargá todo de una vez</h3>
+                      <p class="import-copy">Arrancá con un archivo Excel o CSV y el sistema crea o actualiza productos automáticamente según el nombre.</p>
+                    </div>
+                  </div>
+
+                  <div class="import-input-wrap">
+                    <div class="import-pick-zone">
+                      <label class="form-label fw-semibold" for="catalog_file">Archivo Excel</label>
+                      <input class="form-control" id="catalog_file" name="catalog_file" type="file" accept=".xlsx,.xls,.csv" required>
+                      <div class="import-drop-hint">
+                        <strong>Arrastrá y soltá tu archivo acá</strong>
+                        <span>o hacé clic para seleccionarlo</span>
+                      </div>
+                      <div class="import-file-state" id="catalogImportFileState">Todavía no hay ningún archivo seleccionado</div>
+                    </div>
+                    <div class="import-chips" aria-label="Columnas esperadas">
+                      <span class="import-chip">Producto</span>
+                      <span class="import-chip">Precio</span>
+                      <span class="import-chip">Unidad</span>
+                      <span class="import-chip">Descripción</span>
+                      <span class="import-chip">Moneda</span>
+                      <span class="import-chip">Imagen</span>
+                    </div>
+                    <div class="form-text">La primera fila debe traer esos títulos. Imagen es opcional y puede ser una URL pública, un nombre de archivo ya subido o una imagen incrustada en la fila del Excel.</div>
+                  </div>
+                </div>
+
+                <div class="import-side">
+                  <div>
+                    <p class="import-side-label">Importación inteligente</p>
+                    <h3 class="import-side-title">Crea nuevos y actualiza los existentes</h3>
+                    <p class="import-side-copy">Si el nombre del producto ya existe en tu catálogo, se actualizan precio, moneda, unidad y descripción con los datos del archivo.</p>
+                  </div>
+
+                  <button type="submit" class="btn btn-primary action-btn w-100">Subir e importar</button>
+
+                  <ul class="import-list" aria-label="Reglas de importación">
+                    <li><span class="import-list-dot" aria-hidden="true"></span>Compatible con XLSX, XLS y CSV</li>
+                    <li><span class="import-list-dot" aria-hidden="true"></span>Omite filas totalmente vacías</li>
+                    <li><span class="import-list-dot" aria-hidden="true"></span>Muestra aviso si alguna fila falla</li>
+                  </ul>
+                </div>
+              </form>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="card card-lift mb-4">
-        <div class="card-header card-header-clean bg-white px-4 py-3">
-          <p class="muted-label mb-1" id="catalogFormModeLabel"><?= $edit ? 'Editar' : 'Nuevo' ?></p>
-          <h2 class="h5 mb-0" id="catalogFormModeTitle"><?= $edit ? 'Modificar producto' : 'Agregar producto' ?></h2>
-        </div>
-        <div class="card-body px-4 py-4">
-          <form method="post" action="/catalogo" class="row g-3" id="catalogForm" enctype="multipart/form-data">
-            <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
-            <input type="hidden" name="q" id="catalogFormQ" value="<?= e($q) ?>">
-            <input type="hidden" name="action" id="catalogAction" value="<?= $edit ? 'update' : 'create' ?>">
-            <input type="hidden" name="id" id="catalogId" value="<?= $edit ? e((string)$edit['id']) : '' ?>">
-
-            <div class="col-12 col-md-6">
-              <label class="form-label" for="name">Producto</label>
-              <div class="input-group">
-                <input class="form-control" id="name" name="name" value="<?= e($defaultName) ?>" required>
-                <button class="btn btn-outline-secondary" type="button" id="catalogVoiceBtn">Voz</button>
+      <div class="modal fade catalog-modal" id="catalogProductModal" tabindex="-1" aria-labelledby="catalogFormModeTitle" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+          <div class="modal-content">
+            <div class="modal-header px-4 py-3">
+              <div>
+                <p class="muted-label mb-1" id="catalogFormModeLabel"><?= $edit ? 'Editar' : 'Nuevo' ?></p>
+                <h2 class="h5 mb-0" id="catalogFormModeTitle"><?= $edit ? 'Modificar producto' : 'Agregar producto' ?></h2>
               </div>
-              <input class="d-none" type="file" id="catalogVoiceFile" accept="audio/*" capture>
-              <div class="form-text">Podés decir: “arroz integral, precio 1500 pesos”. Si tu navegador no soporta voz, usá el micrófono del teclado (dictado) con el cursor en el campo.</div>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
-            <div class="col-12 col-md-3">
-              <label class="form-label" for="price">Precio</label>
-              <input class="form-control" id="price" name="price" inputmode="decimal" placeholder="0.00" value="<?= e($defaultPrice) ?>" required>
-            </div>
-            <div class="col-12 col-md-3">
-              <label class="form-label" for="unit">Unidad</label>
-              <select class="form-select" id="unit" name="unit">
-                <?php foreach ([
-                  'kg' => 'Por kilo (kg)',
-                  'l' => 'Por litro (l)',
-                  'un' => 'Por unidad (un)',
-                ] as $k => $label): ?>
-                  <option value="<?= e($k) ?>" <?= (string)$defaultUnit === (string)$k ? 'selected' : '' ?>><?= e($label) ?></option>
-                <?php endforeach; ?>
-              </select>
-              <div class="form-text">Aclaración: el precio es por <strong>1 kg</strong>, <strong>1 litro</strong> o <strong>1 unidad</strong>.</div>
-            </div>
-            <div class="col-12 col-md-3">
-              <label class="form-label" for="currency">Moneda</label>
-              <select class="form-select" id="currency" name="currency">
-                <?php foreach (['ARS', 'USD', 'EUR'] as $cur): ?>
-                  <option value="<?= e($cur) ?>" <?= strtoupper($defaultCurrency) === $cur ? 'selected' : '' ?>><?= e($cur) ?></option>
-                <?php endforeach; ?>
-              </select>
-            </div>
+            <div class="modal-body px-4 py-4">
+              <form method="post" action="/catalogo" class="row g-3" id="catalogForm" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+                <input type="hidden" name="q" id="catalogFormQ" value="<?= e($q) ?>">
+                <input type="hidden" name="action" id="catalogAction" value="<?= $edit ? 'update' : 'create' ?>">
+                <input type="hidden" name="id" id="catalogId" value="<?= $edit ? e((string)$edit['id']) : '' ?>">
 
-            <div class="col-12 col-md-6">
-              <label class="form-label" for="image">Imagen del producto <span class="text-muted">(opcional)</span></label>
-              <div class="image-upload mt-2">
-                <div class="image-preview" id="imagePreviewWrap">
-                  <img id="imagePreview" src="<?= e($defaultImageUrl) ?>" data-current-url="<?= e($defaultImageUrl) ?>" alt="Imagen" style="<?= $defaultImageUrl !== '' ? '' : 'display:none;' ?>">
-                  <span id="imagePlaceholder" class="image-placeholder" style="<?= $defaultImageUrl !== '' ? 'display:none;' : '' ?>">SIN FOTO</span>
+                <div class="col-12 col-md-6">
+                  <label class="form-label" for="name">Producto</label>
+                  <div class="input-group">
+                    <input class="form-control" id="name" name="name" value="<?= e($defaultName) ?>" required>
+                    <button class="btn btn-outline-secondary" type="button" id="catalogVoiceBtn">Voz</button>
+                  </div>
+                  <input class="d-none" type="file" id="catalogVoiceFile" accept="audio/*" capture>
+                  <div class="form-text">Podés decir: “arroz integral, precio 1500 pesos”. Si tu navegador no soporta voz, usá el micrófono del teclado (dictado) con el cursor en el campo.</div>
                 </div>
-                <div>
-                  <input class="form-control" id="image" name="image" type="file" accept="image/jpeg,image/png,image/webp">
-                  <div class="form-text">Formatos: JPG, PNG o WebP. Máx. 4 MB.</div>
-                  <div class="image-actions mt-2">
-                    <div class="form-check">
-                      <input class="form-check-input" type="checkbox" id="imageRemove" name="image_remove" value="1">
-                      <label class="form-check-label" for="imageRemove">Quitar imagen</label>
+                <div class="col-12 col-md-3">
+                  <label class="form-label" for="price">Precio</label>
+                  <input class="form-control" id="price" name="price" inputmode="decimal" placeholder="0.00" value="<?= e($defaultPrice) ?>" required>
+                </div>
+                <div class="col-12 col-md-3">
+                  <label class="form-label" for="unit">Unidad</label>
+                  <select class="form-select" id="unit" name="unit">
+                    <?php foreach ([
+                      'kg' => 'Por kilo (kg)',
+                      'l' => 'Por litro (l)',
+                      'un' => 'Por unidad (un)',
+                    ] as $k => $label): ?>
+                      <option value="<?= e($k) ?>" <?= (string)$defaultUnit === (string)$k ? 'selected' : '' ?>><?= e($label) ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                  <div class="form-text">Aclaración: el precio es por <strong>1 kg</strong>, <strong>1 litro</strong> o <strong>1 unidad</strong>.</div>
+                </div>
+                <div class="col-12 col-md-3">
+                  <label class="form-label" for="currency">Moneda</label>
+                  <select class="form-select" id="currency" name="currency">
+                    <?php foreach (['ARS', 'USD', 'EUR'] as $cur): ?>
+                      <option value="<?= e($cur) ?>" <?= strtoupper($defaultCurrency) === $cur ? 'selected' : '' ?>><?= e($cur) ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </div>
+
+                <div class="col-12 col-md-6">
+                  <label class="form-label" for="image">Imagen del producto <span class="text-muted">(opcional)</span></label>
+                  <div class="image-upload mt-2">
+                    <div class="image-preview" id="imagePreviewWrap">
+                      <img id="imagePreview" src="<?= e($defaultImageUrl) ?>" data-current-url="<?= e($defaultImageUrl) ?>" alt="Imagen" style="<?= $defaultImageUrl !== '' ? '' : 'display:none;' ?>">
+                      <span id="imagePlaceholder" class="image-placeholder" style="<?= $defaultImageUrl !== '' ? 'display:none;' : '' ?>">SIN FOTO</span>
+                    </div>
+                    <div>
+                      <input class="form-control" id="image" name="image" type="file" accept="image/jpeg,image/png,image/webp">
+                      <div class="form-text">Formatos: JPG, PNG o WebP. Máx. 4 MB.</div>
+                      <div class="image-actions mt-2">
+                        <div class="form-check">
+                          <input class="form-check-input" type="checkbox" id="imageRemove" name="image_remove" value="1">
+                          <label class="form-check-label" for="imageRemove">Quitar imagen</label>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            <div class="col-12">
-              <label class="form-label" for="description">Descripción <span class="text-muted">(opcional)</span></label>
-              <textarea class="form-control" id="description" name="description" rows="2" maxlength="255" placeholder="Ej: integral, sin TACC, sabor vainilla…"><?= e($defaultDescription) ?></textarea>
-            </div>
+                <div class="col-12">
+                  <label class="form-label" for="description">Descripción <span class="text-muted">(opcional)</span></label>
+                  <textarea class="form-control" id="description" name="description" rows="2" maxlength="255" placeholder="Ej: integral, sin TACC, sabor vainilla…"><?= e($defaultDescription) ?></textarea>
+                </div>
 
-            <div class="col-12 d-flex flex-wrap gap-2 justify-content-end">
-              <a class="btn btn-outline-secondary action-btn <?= $edit ? '' : 'd-none' ?>" id="catalogCancel" href="/catalogo<?= $q !== '' ? ('?q=' . rawurlencode($q)) : '' ?>">Cancelar</a>
-              <button type="submit" class="btn btn-primary action-btn"><?= $edit ? 'Guardar cambios' : 'Agregar' ?></button>
+                <div class="col-12 d-flex flex-wrap gap-2 justify-content-end">
+                  <a class="btn btn-outline-secondary action-btn <?= $edit ? '' : 'd-none' ?>" id="catalogCancel" href="/catalogo<?= $q !== '' ? ('?q=' . rawurlencode($q)) : '' ?>">Cancelar</a>
+                  <button type="submit" class="btn btn-primary action-btn"><?= $edit ? 'Guardar cambios' : 'Agregar' ?></button>
+                </div>
+              </form>
             </div>
-          </form>
+          </div>
         </div>
       </div>
 
@@ -1260,6 +1310,7 @@ foreach ($rows as $r) {
   const endpoint = buildAjaxEndpoint();
   const initialItems = <?= json_encode($initialItems, JSON_UNESCAPED_UNICODE) ?>;
   const initialImportFlash = <?= json_encode(stripos($flash, 'Importación completada') !== false ? $flash : '', JSON_UNESCAPED_UNICODE) ?>;
+  const initialEditMode = <?= json_encode($edit !== null) ?>;
   let localItems = Array.isArray(initialItems) ? initialItems : [];
   let ajaxAvailable = true;
 
@@ -1277,10 +1328,13 @@ foreach ($rows as $r) {
   const importFileInput = document.getElementById('catalog_file');
   const importFileState = document.getElementById('catalogImportFileState');
   const importSubmitBtn = importForm ? importForm.querySelector('button[type="submit"]') : null;
+  const importModalEl = document.getElementById('catalogImportModal');
   const importToastEl = document.getElementById('catalogImportToast');
   const importToastBody = document.getElementById('catalogImportToastBody');
   const importSuccessModalEl = document.getElementById('catalogImportSuccessModal');
   const importSuccessModalBody = document.getElementById('catalogImportSuccessModalBody');
+  const productModalEl = document.getElementById('catalogProductModal');
+  const productModalTrigger = document.getElementById('catalogOpenFormBtn');
   const form = document.getElementById('catalogForm');
   const formQ = document.getElementById('catalogFormQ');
   const actionInput = document.getElementById('catalogAction');
@@ -1309,6 +1363,8 @@ foreach ($rows as $r) {
   const clearMsgs = () => { hideMsg(clientSuccess); hideMsg(clientError); };
   let importToast = null;
   let importSuccessModal = null;
+  let importModal = null;
+  let productModal = null;
 
   const isNetworkFetchError = (error) => {
     const message = error && error.message ? String(error.message) : String(error || '');
@@ -1335,6 +1391,47 @@ foreach ($rows as $r) {
       importSuccessModal = new window.bootstrap.Modal(importSuccessModalEl);
     }
     importSuccessModal.show();
+  };
+
+  const getImportModal = () => {
+    if (!importModalEl || !window.bootstrap || !window.bootstrap.Modal) {
+      return null;
+    }
+    if (!importModal) {
+      importModal = new window.bootstrap.Modal(importModalEl);
+    }
+    return importModal;
+  };
+
+  const getProductModal = () => {
+    if (!productModalEl || !window.bootstrap || !window.bootstrap.Modal) {
+      return null;
+    }
+    if (!productModal) {
+      productModal = new window.bootstrap.Modal(productModalEl);
+    }
+    return productModal;
+  };
+
+  const showProductModal = () => {
+    const modal = getProductModal();
+    if (modal) {
+      modal.show();
+    }
+  };
+
+  const hideProductModal = () => {
+    const modal = getProductModal();
+    if (modal) {
+      modal.hide();
+    }
+  };
+
+  const hideImportModal = () => {
+    const modal = getImportModal();
+    if (modal) {
+      modal.hide();
+    }
   };
 
   const setImportFileState = (file) => {
@@ -1382,6 +1479,7 @@ foreach ($rows as $r) {
       const resp = await postFormAction(fd);
       if (importForm) importForm.reset();
       setImportFileState(null);
+      hideImportModal();
       showMsg(clientSuccess, resp.message || 'Importación completada.');
       showImportToast(resp.message || 'Importación completada.');
       showImportSuccessModal(resp.message || 'Importación completada.');
@@ -1461,6 +1559,7 @@ foreach ($rows as $r) {
     if (imageRemove) imageRemove.checked = false;
     clearImageObjectUrl();
     setImagePreview(item.image_url || '');
+    showProductModal();
     nameInput.focus();
   };
 
@@ -1928,6 +2027,13 @@ foreach ($rows as $r) {
     });
   }
 
+  if (productModalTrigger) {
+    productModalTrigger.addEventListener('click', () => {
+      clearMsgs();
+      setCreateMode();
+    });
+  }
+
   if (importDropzone) {
     const stop = (e) => {
       e.preventDefault();
@@ -2015,6 +2121,7 @@ foreach ($rows as $r) {
         .then((resp) => {
           showMsg(clientSuccess, resp.message || 'OK');
           setCreateMode();
+          hideProductModal();
           return refresh();
         })
         .catch((err) => showMsg(clientError, err.message || String(err)));
@@ -2099,6 +2206,7 @@ foreach ($rows as $r) {
       e.preventDefault();
       clearMsgs();
       setCreateMode();
+      hideProductModal();
     });
   }
 
@@ -2140,6 +2248,10 @@ foreach ($rows as $r) {
   if (initialImportFlash) {
     showImportToast(initialImportFlash);
     showImportSuccessModal(initialImportFlash);
+  }
+
+  if (initialEditMode) {
+    showProductModal();
   }
 
   // Carga por voz
