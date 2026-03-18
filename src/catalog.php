@@ -341,6 +341,23 @@ function catalog_image_url(string $imagePath): string
     return '/uploads/catalog/' . rawurlencode($safe);
 }
 
+function catalog_image_file_path(string $imagePath): string
+{
+    $safe = catalog_sanitize_image_path($imagePath);
+    if ($safe === '') {
+        return '';
+    }
+
+    foreach (catalog_image_storage_dirs() as $dir) {
+        $path = $dir . DIRECTORY_SEPARATOR . $safe;
+        if (is_file($path)) {
+            return $path;
+        }
+    }
+
+    return '';
+}
+
 function catalog_store_uploaded_image(array $file): string
 {
     $error = isset($file['error']) ? (int)$file['error'] : UPLOAD_ERR_NO_FILE;

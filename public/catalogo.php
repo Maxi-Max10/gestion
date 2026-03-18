@@ -108,8 +108,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && in_array($format, ['csv', 'xlsx'], t
       throw new RuntimeException('No se encontró la tabla del catálogo. ¿Ejecutaste el schema.sql?');
     }
 
-    $exportRows = catalog_export_rows(catalog_list($pdo, $userId, $q, 5000));
-    $headers = ['plu', 'producto', 'descripcion', 'unidad', 'precio', 'moneda', 'actualizado', 'creado'];
+    $catalogRows = catalog_list($pdo, $userId, $q, 5000);
+    $exportRows = catalog_export_rows($catalogRows);
+    $headers = ['producto', 'precio', 'unidad', 'descripcion', 'moneda', 'imagen'];
     $stamp = date('Ymd-His');
     $base = 'catalogo-productos-' . $stamp;
 
@@ -118,7 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && in_array($format, ['csv', 'xlsx'], t
       exit;
     }
 
-    reports_export_xlsx('Catalogo', $headers, $exportRows, $base . '.xlsx');
+    catalog_export_xlsx_import_format('Catalogo', $catalogRows, $base . '.xlsx');
     exit;
   } catch (Throwable $e) {
     error_log('catalogo.php export error: ' . $e->getMessage());
@@ -352,18 +353,78 @@ function catalog_export_rows(array $rows): array
   $out = [];
   foreach ($rows as $r) {
     $priceCents = (int)($r['price_cents'] ?? 0);
+    $imagePath = (string)($r['image_path'] ?? '');
     $out[] = [
-      'plu' => (string)($r['id'] ?? 0),
       'producto' => (string)($r['name'] ?? ''),
-      'descripcion' => (string)($r['description'] ?? ''),
-      'unidad' => (string)($r['unit'] ?? ''),
       'precio' => number_format($priceCents / 100, 2, '.', ''),
+      'unidad' => (string)($r['unit'] ?? ''),
+      'descripcion' => (string)($r['description'] ?? ''),
       'moneda' => (string)($r['currency'] ?? 'ARS'),
-      'actualizado' => (string)($r['updated_at'] ?? ''),
-      'creado' => (string)($r['created_at'] ?? ''),
+      'imagen' => $imagePath,
     ];
   }
   return $out;
+}
+
+/**
+ * @param array<int, array<string, mixed>> $rows
+ */
+function catalog_export_xlsx_import_format(string $sheetName, array $rows, string $filename): void
+{
+  if (!class_exists('PhpOffice\\PhpSpreadsheet\\Spreadsheet')) {
+    throw new RuntimeException('Falta instalar dependencias para XLSX (PhpSpreadsheet).');
+  }
+
+  $spreadsheet = new PhpOffice\PhpSpreadsheet\Spreadsheet();
+  $sheet = $spreadsheet->getActiveSheet();
+  $sheet->setTitle($sheetName);
+
+  $headers = ['Producto', 'Precio', 'Unidad', 'Descripción', 'Moneda', 'Imagen'];
+  $sheet->fromArray($headers, null, 'A1');
+  $sheet->getStyle('A1:F1')->getFont()->setBold(true);
+
+  $rowIndex = 2;
+  foreach ($rows as $r) {
+    $priceCents = (int)($r['price_cents'] ?? 0);
+    $imagePath = (string)($r['image_path'] ?? '');
+
+    $sheet->fromArray([
+      (string)($r['name'] ?? ''),
+      number_format($priceCents / 100, 2, '.', ''),
+      (string)($r['unit'] ?? ''),
+      (string)($r['description'] ?? ''),
+      (string)($r['currency'] ?? 'ARS'),
+      $imagePath,
+    ], null, 'A' . $rowIndex);
+
+    $localImagePath = $imagePath !== '' ? catalog_image_file_path($imagePath) : '';
+    if ($localImagePath !== '') {
+      $sheet->getRowDimension($rowIndex)->setRowHeight(64);
+      $drawing = new PhpOffice\PhpSpreadsheet\Worksheet\Drawing();
+      $drawing->setPath($localImagePath);
+      $drawing->setName((string)($r['name'] ?? 'Imagen'));
+      $drawing->setDescription((string)($r['name'] ?? 'Imagen del producto'));
+      $drawing->setCoordinates('F' . $rowIndex);
+      $drawing->setOffsetX(8);
+      $drawing->setOffsetY(6);
+      $drawing->setHeight(52);
+      $drawing->setWorksheet($sheet);
+    }
+
+    $rowIndex++;
+  }
+
+  foreach (['A' => 28, 'B' => 12, 'C' => 12, 'D' => 34, 'E' => 12, 'F' => 18] as $column => $width) {
+    $sheet->getColumnDimension($column)->setWidth($width);
+  }
+  $sheet->freezePane('A2');
+
+  header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  header('Content-Disposition: attachment; filename="' . $filename . '"');
+  header('X-Content-Type-Options: nosniff');
+
+  $writer = new PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+  $writer->save('php://output');
 }
 
 ?>
