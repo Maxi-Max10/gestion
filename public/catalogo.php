@@ -796,9 +796,51 @@ function catalog_export_xlsx_import_format(string $sheetName, array $rows, strin
       background: rgba(255,255,255,.92);
       flex: 0 0 auto;
     }
+    .catalog-toast-wrap {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      z-index: 1080;
+      max-width: min(92vw, 420px);
+    }
+    .catalog-toast {
+      border: 0;
+      border-radius: 18px;
+      overflow: hidden;
+      background: rgba(255,255,255,.96);
+      box-shadow: 0 24px 60px rgba(15,23,42,.18);
+      backdrop-filter: blur(10px);
+    }
+    .catalog-toast .toast-header {
+      border-bottom: 1px solid rgba(15,23,42,.06);
+      background: linear-gradient(135deg, rgba(var(--accent-rgb), .12), rgba(var(--accent-2-rgb), .06));
+      color: var(--ink);
+    }
+    .catalog-toast-icon {
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+      box-shadow: 0 10px 24px rgba(var(--accent-rgb), .24);
+      flex: 0 0 auto;
+    }
+    .catalog-toast .toast-body {
+      color: rgba(17,24,39,.82);
+      line-height: 1.55;
+    }
     @media (max-width: 576px) {
       .image-upload { grid-template-columns: 70px 1fr; }
       .image-preview { width: 70px; height: 70px; border-radius: 14px; }
+      .catalog-toast-wrap {
+        top: .75rem;
+        right: .75rem;
+        left: .75rem;
+        max-width: none;
+      }
     }
     @media (max-width: 991.98px) {
       .import-grid {
@@ -808,6 +850,20 @@ function catalog_export_xlsx_import_format(string $sheetName, array $rows, strin
   </style>
 </head>
 <body class="has-leaves-bg">
+<div class="catalog-toast-wrap" aria-live="polite" aria-atomic="true">
+  <div id="catalogImportToast" class="toast catalog-toast" role="status" aria-live="polite" aria-atomic="true" data-bs-delay="4200">
+    <div class="toast-header">
+      <span class="catalog-toast-icon me-2" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 8.5 6.2 11.5 13 4.5" />
+        </svg>
+      </span>
+      <strong class="me-auto">Importación completada</strong>
+      <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Cerrar"></button>
+    </div>
+    <div class="toast-body" id="catalogImportToastBody">Los productos se importaron correctamente.</div>
+  </div>
+</div>
 <div class="bg-leaves" aria-hidden="true">
   <div class="bg-leaf leaf-1"></div>
   <div class="bg-leaf leaf-2"></div>
@@ -1171,6 +1227,7 @@ foreach ($rows as $r) {
   const basePath = window.location.pathname || '/catalogo';
   const endpoint = `${basePath}?ajax=1`;
   const initialItems = <?= json_encode($initialItems, JSON_UNESCAPED_UNICODE) ?>;
+  const initialImportFlash = <?= json_encode(stripos($flash, 'Importación completada') !== false ? $flash : '', JSON_UNESCAPED_UNICODE) ?>;
   let localItems = Array.isArray(initialItems) ? initialItems : [];
   let ajaxAvailable = true;
 
@@ -1188,6 +1245,8 @@ foreach ($rows as $r) {
   const importFileInput = document.getElementById('catalog_file');
   const importFileState = document.getElementById('catalogImportFileState');
   const importSubmitBtn = importForm ? importForm.querySelector('button[type="submit"]') : null;
+  const importToastEl = document.getElementById('catalogImportToast');
+  const importToastBody = document.getElementById('catalogImportToastBody');
   const form = document.getElementById('catalogForm');
   const formQ = document.getElementById('catalogFormQ');
   const actionInput = document.getElementById('catalogAction');
@@ -1214,6 +1273,18 @@ foreach ($rows as $r) {
   const hideMsg = (el) => { if (!el) return; el.classList.add('d-none'); el.textContent = ''; };
   const showMsg = (el, msg) => { if (!el) return; el.textContent = msg; el.classList.remove('d-none'); };
   const clearMsgs = () => { hideMsg(clientSuccess); hideMsg(clientError); };
+  let importToast = null;
+
+  const showImportToast = (message) => {
+    if (!importToastEl || !importToastBody || !window.bootstrap || !window.bootstrap.Toast) {
+      return;
+    }
+    importToastBody.textContent = String(message || 'Los productos se importaron correctamente.');
+    if (!importToast) {
+      importToast = new window.bootstrap.Toast(importToastEl);
+    }
+    importToast.show();
+  };
 
   const setImportFileState = (file) => {
     if (!importFileState) return;
@@ -1261,6 +1332,7 @@ foreach ($rows as $r) {
       if (importForm) importForm.reset();
       setImportFileState(null);
       showMsg(clientSuccess, resp.message || 'Importación completada.');
+      showImportToast(resp.message || 'Importación completada.');
 
       const rowErrors = resp && resp.result && Array.isArray(resp.result.errors)
         ? resp.result.errors
@@ -2002,6 +2074,10 @@ foreach ($rows as $r) {
   refresh().catch(() => {
     // Si falla, queda el render server-side.
   });
+
+  if (initialImportFlash) {
+    showImportToast(initialImportFlash);
+  }
 
   // Carga por voz
   if (voiceBtn) {
