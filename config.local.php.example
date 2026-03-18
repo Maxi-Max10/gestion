@@ -1,0 +1,38 @@
+<?php
+
+// Copiá este archivo como config.local.php (NO se versiona) y completá.
+
+define('APP_NAME', 'Dietetic');
+// define('APP_ENV', 'production');
+// define('APP_BASE_URL', 'https://lightslategrey-swan-233172.hostingersite.com');
+
+define('DB_HOST', 'localhost');
+define('DB_NAME', 'TU_DB_NAME');
+define('DB_USER', 'TU_DB_USER');
+define('DB_PASS', 'TU_DB_PASS');
+
+// Email (recomendado en hosting: SMTP)
+// Tip Hostinger: crear una casilla en tu dominio y usar esos datos.
+// define('MAIL_FROM', 'no-reply@tu-dominio.com');
+// define('MAIL_FROM_NAME', 'Dietetic');
+//
+// define('SMTP_HOST', 'smtp.hostinger.com');
+// define('SMTP_USER', 'no-reply@tu-dominio.com');
+// define('SMTP_PASS', 'TU_PASSWORD_EMAIL');
+// define('SMTP_PORT', 587);
+// define('SMTP_SECURE', 'tls');
+
+// Voz / transcripción (para Catálogo)
+// Necesitás una API key de OpenAI para transcribir audio (iOS/Android/desktop).
+// define('OPENAI_API_KEY', 'TU_OPENAI_API_KEY');
+// Opcional: por defecto whisper-1
+// define('OPENAI_TRANSCRIBE_MODEL', 'whisper-1');
+
+// Google Maps (embed)
+// Creá una API key y habilitá "Maps Embed API".
+// define('GOOGLE_MAPS_API_KEY', 'TU_GOOGLE_MAPS_API_KEY');
+
+// Lista de precios pública + pedidos para retiro
+// Si tenés 1 solo usuario admin, podés NO configurar esto.
+// Si tenés más de un usuario, definí cuál "dueño" del catálogo se muestra públicamente.
+// define('PUBLIC_CATALOG_USER_ID', '1');

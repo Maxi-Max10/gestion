@@ -1,0 +1,414 @@
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/../src/bootstrap.php';
+
+if (auth_user_id() !== null) {
+    header('Location: /dashboard.php');
+    exit;
+}
+
+$config = app_config();
+$error = '';
+$email = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $email = trim((string)($_POST['email'] ?? ''));
+    $password = (string)($_POST['password'] ?? '');
+    $token = (string)($_POST['csrf_token'] ?? '');
+
+    if (!csrf_verify($token)) {
+        $error = 'Sesión inválida. Recargá e intentá de nuevo.';
+    } elseif ($email === '' || $password === '') {
+        $error = 'Completá email y contraseña.';
+    } else {
+        try {
+            $pdo = db($config);
+            $ok = auth_login($pdo, $email, $password);
+            if ($ok) {
+              $_SESSION['preload_dashboard'] = 1;
+                header('Location: /dashboard.php');
+                exit;
+            }
+            $error = 'Credenciales incorrectas.';
+        } catch (Throwable $e) {
+          // Loguea el error real (útil en Hostinger: revisá "Errors" / "error_log").
+          error_log('Login DB error: ' . $e->getMessage());
+
+          $env = (string)($config['app']['env'] ?? 'production');
+          $msg = (string)$e->getMessage();
+
+          // Mensajes seguros para producción (sin revelar detalles sensibles).
+          if (str_contains($msg, 'Falta configurar la base de datos')) {
+            $error = 'Falta configurar la base de datos: creá `config.local.php` y completá DB_HOST/DB_NAME/DB_USER/DB_PASS.';
+          } elseif (stripos($msg, 'Access denied') !== false) {
+            $error = 'No se pudo conectar: usuario/contraseña de MySQL incorrectos (DB_USER/DB_PASS).';
+          } elseif (stripos($msg, 'Unknown database') !== false) {
+            $error = 'No se pudo conectar: el nombre de la base (DB_NAME) no existe o está mal.';
+          } elseif (stripos($msg, 'getaddrinfo') !== false || stripos($msg, 'Name or service not known') !== false) {
+            $error = 'No se pudo conectar: el host de MySQL (DB_HOST) es incorrecto.';
+          } elseif (stripos($msg, 'Connection refused') !== false) {
+            $error = 'No se pudo conectar: MySQL rechazó la conexión (host/puerto).';
+          } else {
+            $error = 'No se pudo conectar a la base de datos.';
+          }
+
+          if ($env !== 'production') {
+            $error .= ' (Detalle: ' . $msg . ')';
+          }
+        }
+    }
+}
+
+$appName = (string)($config['app']['name'] ?? 'Dietetic');
+$csrf = csrf_token();
+?>
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Login</title>
+  <link rel="icon" type="image/png" href="/logo.png">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <link rel="stylesheet" href="/brand.css?v=20260318-1">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    html, body { height: 100%; overflow-x: hidden; width: 100%; }
+    body {
+      position: relative;
+      background: radial-gradient(circle at 10% 20%, rgba(59,130,246,.22), transparent 38%),
+                  radial-gradient(circle at 90% 10%, rgba(30,58,138,.12), transparent 40%),
+                  linear-gradient(120deg, #F3F4F6, #F3F4F6);
+    }
+
+    .bg-leaves { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+    .bg-leaf { position: absolute; background: url('/fondo.png') no-repeat center / contain; opacity: .12; filter: drop-shadow(0 18px 40px rgba(15,23,42,.08)); }
+
+    .bg-leaf.leaf-1  { width: 240px; height: 240px; left: -90px;  top: 80px;   transform: rotate(-18deg); opacity: .09; }
+    .bg-leaf.leaf-2  { width: 320px; height: 320px; right: -140px; top: -110px; transform: rotate(22deg) scaleX(-1); opacity: .10; }
+    .bg-leaf.leaf-3  { width: 210px; height: 210px; right: -70px;  top: 38%;    transform: rotate(145deg); opacity: .08; }
+    .bg-leaf.leaf-4  { width: 280px; height: 280px; left: -140px;  top: 52%;    transform: rotate(95deg) scaleX(-1); opacity: .07; }
+    .bg-leaf.leaf-5  { width: 180px; height: 180px; left: 14%;     top: -70px;  transform: rotate(-40deg); opacity: .06; }
+    .bg-leaf.leaf-6  { width: 220px; height: 220px; left: 62%;     top: 18%;    transform: rotate(28deg); opacity: .07; }
+    .bg-leaf.leaf-7  { width: 160px; height: 160px; right: 14%;    top: 58%;    transform: rotate(-120deg) scaleX(-1); opacity: .06; }
+    .bg-leaf.leaf-8  { width: 260px; height: 260px; right: -110px; bottom: 80px; transform: rotate(35deg); opacity: .07; }
+    .bg-leaf.leaf-9  { width: 200px; height: 200px; left: 10%;     bottom: 120px; transform: rotate(155deg); opacity: .06; }
+    .bg-leaf.leaf-10 { width: 340px; height: 340px; left: -160px;  bottom: -140px; transform: rotate(75deg); opacity: .07; }
+    .bg-leaf.leaf-11 { width: 190px; height: 190px; left: 46%;     bottom: -90px; transform: rotate(-10deg) scaleX(-1); opacity: .06; }
+    .bg-leaf.leaf-12 { width: 230px; height: 230px; right: 34%;    bottom: 22%;  transform: rotate(110deg); opacity: .06; }
+    @media (max-width: 576px) {
+      .bg-leaf { opacity: .08; }
+      .bg-leaf.leaf-2  { width: 260px; height: 260px; right: -140px; top: -140px; }
+      .bg-leaf.leaf-10 { width: 260px; height: 260px; left: -150px; bottom: -150px; }
+      .bg-leaf.leaf-6  { width: 170px; height: 170px; left: 58%; top: 22%; }
+      .bg-leaf.leaf-12 { width: 180px; height: 180px; right: 26%; bottom: 18%; }
+    }
+
+    .auth-shell { min-height: 100svh; overflow-x: hidden; }
+    .auth-container.auth-shell { padding-top: 0 !important; padding-bottom: 0 !important; }
+    .brand-hero {
+      background: linear-gradient(135deg, #1E3A8A, #2563EB);
+      position: relative;
+    }
+
+    .brand-hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 25% 20%, rgba(255,255,255,.18), transparent 40%),
+                  radial-gradient(circle at 75% 60%, rgba(255,255,255,.10), transparent 45%),
+                  linear-gradient(135deg, rgba(59,130,246,.22), transparent 55%);
+      pointer-events: none;
+    }
+
+    .auth-container {
+      width: 100%;
+      padding-left: calc(.75rem + env(safe-area-inset-left));
+      padding-right: calc(.75rem + env(safe-area-inset-right));
+    }
+    .auth-card {
+      border-radius: 1.35rem;
+      overflow: hidden;
+      width: 100%;
+      border: 1px solid rgba(15, 23, 42, .08);
+      box-shadow: 0 24px 80px rgba(15, 23, 42, .18);
+      background: rgba(255,255,255,.92);
+      backdrop-filter: blur(10px);
+    }
+    .auth-left { min-height: 220px; }
+    .auth-right { min-height: 220px; }
+    .auth-logo { height: 64px; width: auto; display: inline-block; }
+    .auth-quotes { max-width: 22rem; }
+    .auth-quote {
+      opacity: .92;
+      transition: opacity .35s ease;
+    }
+    .auth-quote.is-fading { opacity: .15; }
+    .auth-blob {
+      width: min(360px, 80%);
+      height: 240px;
+      border-radius: 2.5rem;
+      background: rgba(255, 255, 255, .14);
+      transform: rotate(-6deg);
+    }
+
+    .auth-right .card-body {
+      padding-top: 2.25rem;
+      padding-bottom: 2.25rem;
+    }
+
+    .auth-title {
+      letter-spacing: .01em;
+      color: #111827;
+    }
+
+    .auth-sub {
+      color: rgba(36, 30, 16, .68);
+      font-size: .95rem;
+    }
+
+    .auth-input .input-group-text {
+      border-top-left-radius: 12px;
+      border-bottom-left-radius: 12px;
+    }
+
+    .auth-input .form-control {
+      border-top-right-radius: 12px;
+      border-bottom-right-radius: 12px;
+      border-color: rgba(15, 23, 42, .10);
+      background: rgba(255, 255, 255, .92);
+    }
+
+    .auth-input .form-control::placeholder { color: rgba(36, 30, 16, .45); }
+
+    .auth-btn {
+      border-radius: 14px;
+      font-weight: 700;
+      letter-spacing: .01em;
+      padding: .8rem 1rem;
+    }
+
+    .auth-float {
+      position: absolute;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .16);
+      filter: blur(.2px);
+      animation: auth-float 22s cubic-bezier(.45, 0, .55, 1) infinite;
+      pointer-events: none;
+    }
+
+    .auth-float.f1 { width: 140px; height: 140px; top: 12%; left: -40px; opacity: .55; animation-duration: 26s; }
+    .auth-float.f2 { width: 90px; height: 90px; bottom: 18%; right: -22px; opacity: .45; animation-duration: 30s; animation-delay: -6s; }
+    .auth-float.f3 { width: 56px; height: 56px; top: 22%; right: 18%; opacity: .35; animation-duration: 24s; animation-delay: -3s; }
+
+    @keyframes auth-float {
+      0%, 100% { transform: translate3d(0, 0, 0); }
+      50% { transform: translate3d(10px, -26px, 0); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .auth-float { animation: none; }
+      .auth-quote { transition: none; }
+    }
+    @media (min-width: 992px) {
+      .auth-left { min-height: 520px; }
+      .auth-right { min-height: 520px; }
+      .auth-blob { height: 360px; }
+    }
+  </style>
+</head>
+<body class="has-leaves-bg">
+<div class="bg-leaves" aria-hidden="true">
+  <div class="bg-leaf leaf-1"></div>
+  <div class="bg-leaf leaf-2"></div>
+  <div class="bg-leaf leaf-3"></div>
+  <div class="bg-leaf leaf-4"></div>
+  <div class="bg-leaf leaf-5"></div>
+  <div class="bg-leaf leaf-6"></div>
+  <div class="bg-leaf leaf-7"></div>
+  <div class="bg-leaf leaf-8"></div>
+  <div class="bg-leaf leaf-9"></div>
+  <div class="bg-leaf leaf-10"></div>
+  <div class="bg-leaf leaf-11"></div>
+  <div class="bg-leaf leaf-12"></div>
+</div>
+  <div class="auth-container auth-shell d-flex align-items-center justify-content-center py-4">
+    <div class="row justify-content-center w-100">
+      <div class="col-12 col-lg-10 col-xl-9 col-xxl-8">
+        <div class="card shadow auth-card mx-auto">
+          <div class="row g-0">
+            <div class="col-lg-5">
+              <div class="auth-left brand-hero text-white position-relative d-flex align-items-center justify-content-center p-4">
+                <div class="position-absolute auth-blob"></div>
+                <div class="auth-float f1"></div>
+                <div class="auth-float f2"></div>
+                <div class="auth-float f3"></div>
+                <div class="position-relative text-center" style="z-index:1">
+                  <img src="/logo.png" alt="Logo" class="auth-logo mb-3">
+                  <h2 class="h3 fw-semibold mb-2" id="greetingText">Hola, Bienvenida!</h2>
+                  <div class="auth-quotes mx-auto mt-3">
+                    <div class="small" style="opacity:.9" id="quoteText">“La constancia le gana al talento cuando el talento no es constante.”</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-lg-7 auth-right d-flex align-items-center">
+              <div class="card-body p-4 p-lg-5 w-100 d-flex flex-column justify-content-center">
+                <div class="text-center mb-4">
+                  <h1 class="h3 fw-semibold mb-1 auth-title">Ingresar</h1>
+                  <div class="auth-sub">Accedé con tu usuario y contraseña</div>
+                </div>
+
+                <?php if ($error !== ''): ?>
+                  <div class="alert alert-danger" role="alert"><?= e($error) ?></div>
+                <?php endif; ?>
+
+                <form method="post" action="/login.php" novalidate>
+                  <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+
+                  <div class="mb-3 auth-input">
+                    <div class="input-group">
+                      <span class="input-group-text"><i class="bi bi-person"></i></span>
+                      <input type="email" class="form-control" id="email" name="email" value="<?= e($email) ?>" placeholder="Email" autocomplete="username" required>
+                    </div>
+                  </div>
+
+                  <div class="mb-2 auth-input">
+                    <div class="input-group">
+                      <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                      <input type="password" class="form-control" id="password" name="password" placeholder="Contraseña" autocomplete="current-password" required>
+                    </div>
+                  </div>
+
+                  <div class="mb-3"></div>
+
+                  <button
+                    type="submit"
+                    class="btn btn-brand-light w-100 auth-btn"
+                    style="background-color:#F3F4F6; background-image:linear-gradient(135deg, rgba(243,244,246,.92), rgba(255,255,255,.92)); border:1px solid rgba(30,58,138,.22); color:#1E3A8A;"
+                  >Entrar</button>
+
+                  <p class="text-muted small mt-4 mb-0 text-center"><?= e($appName) ?></p>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+<script>
+  (function () {
+    function getArgentinaHour() {
+      try {
+        var hourStr = new Intl.DateTimeFormat('es-AR', {
+          hour: '2-digit',
+          hour12: false,
+          timeZone: 'America/Argentina/Buenos_Aires'
+        }).format(new Date());
+
+        var hour = Number(hourStr);
+        return Number.isFinite(hour) ? hour : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function greetingForHour(hour) {
+      if (hour === null) return 'Hola, Bienvenida!';
+      if (hour >= 5 && hour < 12) return 'Buenos días, Bienvenida!';
+      if (hour >= 12 && hour < 20) return 'Buenas tardes, Bienvenida!';
+      return 'Buenas noches, Bienvenida!';
+    }
+
+    var greetingEl = document.getElementById('greetingText');
+    if (greetingEl) {
+      greetingEl.textContent = greetingForHour(getArgentinaHour());
+    }
+
+    var quoteEl = document.getElementById('quoteText');
+    if (!quoteEl) return;
+
+    var quotes = [
+      '“Hecho es mejor que perfecto.”',
+      '“Lo que no se mide, no se mejora.”',
+      '“Enfocate en el proceso: los resultados llegan.”',
+      '“Vendé valor, no tiempo.”',
+      '“Pequeños avances diarios crean grandes cambios.”',
+      '“La disciplina construye lo que la motivación empieza.”'
+    ];
+
+    function getArgentinaDateKey() {
+      try {
+        return new Intl.DateTimeFormat('en-CA', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          timeZone: 'America/Argentina/Buenos_Aires'
+        }).format(new Date());
+      } catch (e) {
+        var d = new Date();
+        var y = String(d.getFullYear());
+        var m = String(d.getMonth() + 1).padStart(2, '0');
+        var day = String(d.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+      }
+    }
+
+    function simpleHash(s) {
+      var h = 0;
+      for (var j = 0; j < s.length; j++) {
+        h = ((h << 5) - h) + s.charCodeAt(j);
+        h |= 0;
+      }
+      return Math.abs(h);
+    }
+
+    function renderLocalQuote() {
+      var key = getArgentinaDateKey();
+      var idx = quotes.length ? (simpleHash(key) % quotes.length) : 0;
+      quoteEl.classList.add('auth-quote');
+      quoteEl.textContent = quotes[idx] || '';
+    }
+
+    function setQuote(text) {
+      quoteEl.classList.add('auth-quote');
+      quoteEl.textContent = text || '';
+    }
+
+    function fetchApiQuote() {
+      return fetch('https://www.positive-api.online/api/phrase/esp', { cache: 'no-store' })
+        .then(function (res) {
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          return res.json();
+        })
+        .then(function (data) {
+          var raw = '';
+          if (typeof data === 'string') {
+            raw = data;
+          } else if (data && typeof data === 'object') {
+            raw = (data.phrase || data.quote || data.text || '').toString();
+          }
+          var clean = raw.trim();
+          if (!clean) throw new Error('Empty quote');
+          if (clean[0] !== '“' && clean[0] !== '"') {
+            clean = '“' + clean;
+          }
+          if (clean[clean.length - 1] !== '”' && clean[clean.length - 1] !== '"') {
+            clean = clean + '”';
+          }
+          setQuote(clean);
+          return true;
+        });
+    }
+
+    fetchApiQuote().catch(function () {
+      renderLocalQuote();
+    });
+  })();
+</script>
+</body>
+</html>
