@@ -639,7 +639,7 @@ function catalog_import_normalize_header(string $value): string
 
 /**
  * @param array<int, mixed> $headerRow
- * @return array{name:int,price:int,description:?int,unit:?int,currency:?int,image:?int}
+ * @return array{name:int,price:int,description:?int,unit:?int,currency:?int,image:?int,image_url:?int}
  */
 function catalog_import_resolve_columns(array $headerRow): array
 {
@@ -649,7 +649,8 @@ function catalog_import_resolve_columns(array $headerRow): array
         'description' => ['descripcion', 'descrip', 'detalle', 'description'],
         'unit' => ['unidad', 'unidades', 'unit', 'medida'],
         'currency' => ['moneda', 'currency', 'divisa'],
-        'image' => ['imagen', 'foto', 'image', 'image_url', 'imagen_url', 'url_imagen'],
+        'image' => ['imagen', 'foto', 'image'],
+        'image_url' => ['image_url', 'imagen_url', 'url_imagen', 'url_de_imagen', 'imagen_link', 'image_link'],
     ];
 
     $columns = [
@@ -659,6 +660,7 @@ function catalog_import_resolve_columns(array $headerRow): array
         'unit' => null,
         'currency' => null,
         'image' => null,
+        'image_url' => null,
     ];
 
     foreach ($headerRow as $index => $headerCell) {
@@ -761,8 +763,9 @@ function catalog_import_spreadsheet(PDO $pdo, int $createdBy, array $file): arra
         $unit = $columns['unit'] !== null ? trim((string)($row[$columns['unit']] ?? '')) : '';
         $currency = $columns['currency'] !== null ? trim((string)($row[$columns['currency']] ?? '')) : 'ARS';
         $imageSource = $columns['image'] !== null ? trim((string)($row[$columns['image']] ?? '')) : '';
+        $imageUrlSource = $columns['image_url'] !== null ? trim((string)($row[$columns['image_url']] ?? '')) : '';
 
-        $rowValues = [$name, $price, $description, $unit, $currency, $imageSource];
+        $rowValues = [$name, $price, $description, $unit, $currency, $imageSource, $imageUrlSource];
         $isEmptyRow = true;
         foreach ($rowValues as $rowValue) {
             if (trim((string)$rowValue) !== '') {
@@ -787,8 +790,30 @@ function catalog_import_spreadsheet(PDO $pdo, int $createdBy, array $file): arra
             try {
                 if (isset($embeddedImages[$sheetRow])) {
                     $preparedImage = $embeddedImages[$sheetRow];
-                } elseif ($imageSource !== '') {
-                    $preparedImage = catalog_import_image_from_source($imageSource);
+                } else {
+                    $imageCandidates = [];
+                    if ($imageSource !== '') {
+                        $imageCandidates[] = $imageSource;
+                    }
+                    if ($imageUrlSource !== '' && !in_array($imageUrlSource, $imageCandidates, true)) {
+                        $imageCandidates[] = $imageUrlSource;
+                    }
+
+                    $lastImageError = null;
+                    foreach ($imageCandidates as $imageCandidate) {
+                        try {
+                            $preparedImage = catalog_import_image_from_source($imageCandidate);
+                            if (($preparedImage['path'] ?? '') !== '') {
+                                break;
+                            }
+                        } catch (Throwable $candidateError) {
+                            $lastImageError = $candidateError;
+                        }
+                    }
+
+                    if (($preparedImage['path'] ?? '') === '' && $lastImageError instanceof Throwable) {
+                        throw $lastImageError;
+                    }
                 }
             } catch (Throwable $imageError) {
                 error_log('catalog import image warning row ' . $sheetRow . ': ' . $imageError->getMessage());
