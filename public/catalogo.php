@@ -1366,6 +1366,7 @@ foreach ($rows as $r) {
   let importModal = null;
   let productModal = null;
   let importSuccessModalTimer = null;
+  let pendingImportSuccessMessage = '';
 
   const isNetworkFetchError = (error) => {
     const message = error && error.message ? String(error.message) : String(error || '');
@@ -1445,6 +1446,18 @@ foreach ($rows as $r) {
     }
   };
 
+  const showImportSuccessAfterImportModal = (message) => {
+    const text = String(message || 'Importación completada.');
+    const importModalInstance = getImportModal();
+    if (!importModalEl || !importModalInstance || !importModalEl.classList.contains('show')) {
+      showImportSuccessModal(text);
+      return;
+    }
+
+    pendingImportSuccessMessage = text;
+    hideImportModal();
+  };
+
   const setImportFileState = (file) => {
     if (!importFileState) return;
     if (!file) {
@@ -1490,9 +1503,8 @@ foreach ($rows as $r) {
       const resp = await postFormAction(fd);
       if (importForm) importForm.reset();
       setImportFileState(null);
-      hideImportModal();
       showMsg(clientSuccess, resp.message || 'Importación completada.');
-      showImportSuccessModal(resp.message || 'Importación completada.');
+      showImportSuccessAfterImportModal(resp.message || 'Importación completada.');
 
       const rowErrors = resp && resp.result && Array.isArray(resp.result.errors)
         ? resp.result.errors
@@ -2041,6 +2053,19 @@ foreach ($rows as $r) {
     productModalTrigger.addEventListener('click', () => {
       clearMsgs();
       setCreateMode();
+    });
+  }
+
+  if (importModalEl) {
+    importModalEl.addEventListener('hidden.bs.modal', () => {
+      if (!pendingImportSuccessMessage) {
+        return;
+      }
+      const message = pendingImportSuccessMessage;
+      pendingImportSuccessMessage = '';
+      window.setTimeout(() => {
+        showImportSuccessModal(message);
+      }, 120);
     });
   }
 
