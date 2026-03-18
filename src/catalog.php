@@ -264,12 +264,60 @@ function catalog_ensure_image_column(PDO $pdo): void
 
 function catalog_image_storage_dir(): string
 {
+    $dirs = catalog_image_storage_dirs();
+    return $dirs[0];
+}
+
+/**
+ * @return array<int, string>
+ */
+function catalog_image_storage_dirs(): array
+{
+    $projectRoot = dirname(__DIR__);
+    $dirs = [];
+
     $docRoot = $_SERVER['DOCUMENT_ROOT'] ?? '';
     if (is_string($docRoot) && $docRoot !== '' && is_dir($docRoot)) {
-        return rtrim($docRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'catalog';
+        $dirs[] = rtrim($docRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'catalog';
     }
 
-    return dirname(__DIR__) . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'catalog';
+    $dirs[] = $projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'catalog';
+    $dirs[] = $projectRoot . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'catalog';
+
+    $unique = [];
+    foreach ($dirs as $dir) {
+        $normalized = rtrim($dir, DIRECTORY_SEPARATOR);
+        if ($normalized === '' || in_array($normalized, $unique, true)) {
+            continue;
+        }
+        $unique[] = $normalized;
+    }
+
+    return $unique;
+}
+
+function catalog_ensure_image_storage_dirs(): void
+{
+    foreach (catalog_image_storage_dirs() as $dir) {
+        if (is_dir($dir)) {
+            continue;
+        }
+        if (!mkdir($dir, 0755, true) && !is_dir($dir)) {
+            throw new RuntimeException('No se pudo crear la carpeta de imágenes.');
+        }
+    }
+}
+
+function catalog_write_image_file(string $filename, string $bytes): void
+{
+    catalog_ensure_image_storage_dirs();
+
+    foreach (catalog_image_storage_dirs() as $dir) {
+        $target = $dir . DIRECTORY_SEPARATOR . $filename;
+        if (file_put_contents($target, $bytes) === false) {
+            throw new RuntimeException('No se pudo guardar la imagen.');
+        }
+    }
 }
 
 function catalog_sanitize_image_path(string $path): string
@@ -327,19 +375,39 @@ function catalog_store_uploaded_image(array $file): string
         throw new RuntimeException('Formato de imagen no soportado. Usá JPG, PNG o WebP.');
     }
 
-    $dir = catalog_image_storage_dir();
-    if (!is_dir($dir)) {
-        if (!mkdir($dir, 0755, true) && !is_dir($dir)) {
-            throw new RuntimeException('No se pudo crear la carpeta de imágenes.');
-        }
-    }
-
     $filename = bin2hex(random_bytes(16)) . '.' . $extMap[$mime];
-    $target = $dir . DIRECTORY_SEPARATOR . $filename;
-
-    if (!move_uploaded_file($tmp, $target)) {
+    $bytes = @file_get_contents($tmp);
+    if (!is_string($bytes) || $bytes === '') {
         throw new RuntimeException('No se pudo guardar la imagen.');
     }
+
+    catalog_write_image_file($filename, $bytes);
+
+    return $filename;
+}
+
+function catalog_store_image_bytes(string $bytes, string $mime = ''): string
+{
+    if ($bytes === '') {
+        throw new RuntimeException('La imagen está vacía.');
+    }
+    if (strlen($bytes) > (4 * 1024 * 1024)) {
+        throw new RuntimeException('La imagen supera 4 MB.');
+    }
+
+    $info = @getimagesizefromstring($bytes);
+    $detectedMime = is_array($info) && isset($info['mime']) ? (string)$info['mime'] : trim($mime);
+    $extMap = [
+        'image/jpeg' => 'jpg',
+        'image/png' => 'png',
+        'image/webp' => 'webp',
+    ];
+    if ($detectedMime === '' || !isset($extMap[$detectedMime])) {
+        throw new RuntimeException('Formato de imagen no soportado. Usá JPG, PNG o WebP.');
+    }
+
+    $filename = bin2hex(random_bytes(16)) . '.' . $extMap[$detectedMime];
+    catalog_write_image_file($filename, $bytes);
 
     return $filename;
 }
@@ -350,9 +418,11 @@ function catalog_delete_image_file(string $imagePath): void
     if ($safe === '') {
         return;
     }
-    $path = catalog_image_storage_dir() . DIRECTORY_SEPARATOR . $safe;
-    if (is_file($path)) {
-        @unlink($path);
+    foreach (catalog_image_storage_dirs() as $dir) {
+        $path = $dir . DIRECTORY_SEPARATOR . $safe;
+        if (is_file($path)) {
+            @unlink($path);
+        }
     }
 }
 
@@ -381,6 +451,151 @@ function catalog_find_id_by_name(PDO $pdo, int $createdBy, string $name): int
     return (int)($stmt->fetchColumn() ?: 0);
 }
 
+function catalog_import_column_label(int $columnIndex): string
+{
+    $n = $columnIndex + 1;
+    $label = '';
+    while ($n > 0) {
+        $mod = ($n - 1) % 26;
+        $label = chr(65 + $mod) . $label;
+        $n = intdiv($n - 1, 26);
+    }
+    return $label;
+}
+
+function catalog_import_existing_image_reference(string $source): string
+{
+    $safe = catalog_sanitize_image_path($source);
+    if ($safe === '') {
+        throw new InvalidArgumentException('La referencia de imagen no es válida.');
+    }
+
+    foreach (catalog_image_storage_dirs() as $dir) {
+        $path = $dir . DIRECTORY_SEPARATOR . $safe;
+        if (is_file($path)) {
+            return $safe;
+        }
+    }
+
+    throw new InvalidArgumentException('La imagen indicada no existe en uploads/catalog.');
+}
+
+/**
+ * @return array{path:string,is_new:bool}
+ */
+function catalog_import_image_from_source(string $source): array
+{
+    $source = trim($source);
+    if ($source === '') {
+        return ['path' => '', 'is_new' => false];
+    }
+
+    if (preg_match('#^https?://#i', $source) === 1) {
+        if (!filter_var($source, FILTER_VALIDATE_URL)) {
+            throw new InvalidArgumentException('La URL de la imagen no es válida.');
+        }
+
+        if (!filter_var(ini_get('allow_url_fopen'), FILTER_VALIDATE_BOOLEAN) && ini_get('allow_url_fopen') !== '1') {
+            throw new RuntimeException('El servidor no permite descargar imágenes por URL.');
+        }
+
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'GET',
+                'timeout' => 15,
+                'follow_location' => 1,
+                'user_agent' => 'DieteticCatalogImport/1.0',
+            ],
+            'https' => [
+                'method' => 'GET',
+                'timeout' => 15,
+                'follow_location' => 1,
+                'user_agent' => 'DieteticCatalogImport/1.0',
+            ],
+        ]);
+
+        $bytes = @file_get_contents($source, false, $context, 0, (4 * 1024 * 1024) + 1);
+        if (!is_string($bytes) || $bytes === '') {
+            throw new RuntimeException('No se pudo descargar la imagen desde la URL indicada.');
+        }
+
+        return [
+            'path' => catalog_store_image_bytes($bytes),
+            'is_new' => true,
+        ];
+    }
+
+    return [
+        'path' => catalog_import_existing_image_reference($source),
+        'is_new' => false,
+    ];
+}
+
+/**
+ * @param object $drawing
+ * @return array{path:string,is_new:bool}
+ */
+function catalog_import_image_from_drawing(object $drawing): array
+{
+    if ($drawing instanceof \PhpOffice\PhpSpreadsheet\Worksheet\MemoryDrawing) {
+        $imageResource = $drawing->getImageResource();
+        $renderer = $drawing->getRenderingFunction();
+        if ($imageResource === null || !is_callable($renderer)) {
+            throw new RuntimeException('No se pudo leer la imagen incrustada.');
+        }
+
+        ob_start();
+        $renderer($imageResource);
+        $bytes = (string)ob_get_clean();
+        return [
+            'path' => catalog_store_image_bytes($bytes, (string)$drawing->getMimeType()),
+            'is_new' => true,
+        ];
+    }
+
+    if ($drawing instanceof \PhpOffice\PhpSpreadsheet\Worksheet\Drawing) {
+        $drawingPath = (string)$drawing->getPath();
+        $bytes = @file_get_contents($drawingPath);
+        if (!is_string($bytes) || $bytes === '') {
+            throw new RuntimeException('No se pudo leer la imagen incrustada.');
+        }
+
+        return [
+            'path' => catalog_store_image_bytes($bytes),
+            'is_new' => true,
+        ];
+    }
+
+    throw new RuntimeException('Tipo de imagen incrustada no soportado.');
+}
+
+/**
+ * @return array<int, array{path:string,is_new:bool}>
+ */
+function catalog_import_collect_embedded_images(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet, ?string $imageColumnLabel = null): array
+{
+    $out = [];
+    foreach ($sheet->getDrawingCollection() as $drawing) {
+        $coordinates = strtoupper((string)$drawing->getCoordinates());
+        if (preg_match('/^([A-Z]+)(\d+)$/', $coordinates, $m) !== 1) {
+            continue;
+        }
+
+        $columnLabel = $m[1];
+        $rowIndex = (int)$m[2];
+        if ($rowIndex < 2) {
+            continue;
+        }
+        if ($imageColumnLabel !== null && $columnLabel !== strtoupper($imageColumnLabel)) {
+            continue;
+        }
+
+        $out[$rowIndex] = catalog_import_image_from_drawing($drawing);
+    }
+
+    return $out;
+}
+
 function catalog_import_normalize_header(string $value): string
 {
     $value = trim($value);
@@ -403,7 +618,7 @@ function catalog_import_normalize_header(string $value): string
 
 /**
  * @param array<int, mixed> $headerRow
- * @return array{name:int,price:int,description:?int,unit:?int,currency:?int}
+ * @return array{name:int,price:int,description:?int,unit:?int,currency:?int,image:?int}
  */
 function catalog_import_resolve_columns(array $headerRow): array
 {
@@ -413,6 +628,7 @@ function catalog_import_resolve_columns(array $headerRow): array
         'description' => ['descripcion', 'descrip', 'detalle', 'description'],
         'unit' => ['unidad', 'unidades', 'unit', 'medida'],
         'currency' => ['moneda', 'currency', 'divisa'],
+        'image' => ['imagen', 'foto', 'image', 'image_url', 'imagen_url', 'url_imagen'],
     ];
 
     $columns = [
@@ -421,6 +637,7 @@ function catalog_import_resolve_columns(array $headerRow): array
         'description' => null,
         'unit' => null,
         'currency' => null,
+        'image' => null,
     ];
 
     foreach ($headerRow as $index => $headerCell) {
@@ -486,13 +703,13 @@ function catalog_import_spreadsheet(PDO $pdo, int $createdBy, array $file): arra
 
     try {
         $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReaderForFile($tmpName);
-        $reader->setReadDataOnly(true);
         $spreadsheet = $reader->load($tmpName);
     } catch (Throwable $e) {
         throw new RuntimeException('No se pudo leer el archivo Excel.', 0, $e);
     }
 
-    $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
+    $sheet = $spreadsheet->getActiveSheet();
+    $rows = $sheet->toArray(null, true, true, false);
     if (!is_array($rows) || count($rows) < 2) {
         throw new InvalidArgumentException('El archivo no tiene filas para importar.');
     }
@@ -503,6 +720,8 @@ function catalog_import_spreadsheet(PDO $pdo, int $createdBy, array $file): arra
     }
 
     $columns = catalog_import_resolve_columns($headerRow);
+    $imageColumnLabel = $columns['image'] !== null ? catalog_import_column_label((int)$columns['image']) : null;
+    $embeddedImages = catalog_import_collect_embedded_images($sheet, $imageColumnLabel);
     $created = 0;
     $updated = 0;
     $skipped = 0;
@@ -520,8 +739,9 @@ function catalog_import_spreadsheet(PDO $pdo, int $createdBy, array $file): arra
         $description = $columns['description'] !== null ? trim((string)($row[$columns['description']] ?? '')) : '';
         $unit = $columns['unit'] !== null ? trim((string)($row[$columns['unit']] ?? '')) : '';
         $currency = $columns['currency'] !== null ? trim((string)($row[$columns['currency']] ?? '')) : 'ARS';
+        $imageSource = $columns['image'] !== null ? trim((string)($row[$columns['image']] ?? '')) : '';
 
-        $rowValues = [$name, $price, $description, $unit, $currency];
+        $rowValues = [$name, $price, $description, $unit, $currency, $imageSource];
         $isEmptyRow = true;
         foreach ($rowValues as $rowValue) {
             if (trim((string)$rowValue) !== '') {
@@ -534,6 +754,7 @@ function catalog_import_spreadsheet(PDO $pdo, int $createdBy, array $file): arra
             continue;
         }
 
+        $preparedImage = ['path' => '', 'is_new' => false];
         try {
             if ($name === '') {
                 throw new InvalidArgumentException('Falta el nombre del producto.');
@@ -542,15 +763,44 @@ function catalog_import_spreadsheet(PDO $pdo, int $createdBy, array $file): arra
                 throw new InvalidArgumentException('Falta el precio.');
             }
 
+            if (isset($embeddedImages[$sheetRow])) {
+                $preparedImage = $embeddedImages[$sheetRow];
+            } elseif ($imageSource !== '') {
+                $preparedImage = catalog_import_image_from_source($imageSource);
+            }
+
             $existingId = catalog_find_id_by_name($pdo, $createdBy, $name);
             if ($existingId > 0) {
-                catalog_update($pdo, $createdBy, $existingId, $name, $price, $currency, $description, $unit, null, false);
+                catalog_update(
+                    $pdo,
+                    $createdBy,
+                    $existingId,
+                    $name,
+                    $price,
+                    $currency,
+                    $description,
+                    $unit,
+                    $preparedImage['path'] !== '' ? $preparedImage['path'] : null,
+                    false
+                );
                 $updated++;
             } else {
-                catalog_create($pdo, $createdBy, $name, $price, $currency, $description, $unit);
+                catalog_create(
+                    $pdo,
+                    $createdBy,
+                    $name,
+                    $price,
+                    $currency,
+                    $description,
+                    $unit,
+                    $preparedImage['path']
+                );
                 $created++;
             }
         } catch (Throwable $e) {
+            if (!empty($preparedImage['is_new']) && !empty($preparedImage['path'])) {
+                catalog_delete_image_file((string)$preparedImage['path']);
+            }
             $errors[] = 'Fila ' . $sheetRow . ': ' . $e->getMessage();
         }
     }

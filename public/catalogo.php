@@ -897,8 +897,9 @@ function catalog_export_rows(array $rows): array
                   <span class="import-chip">Unidad</span>
                   <span class="import-chip">Descripción</span>
                   <span class="import-chip">Moneda</span>
+                  <span class="import-chip">Imagen</span>
                 </div>
-                <div class="form-text">La primera fila debe traer esos títulos. Solo Producto y Precio son obligatorias.</div>
+                <div class="form-text">La primera fila debe traer esos títulos. Imagen es opcional y puede ser una URL pública, un nombre de archivo ya subido o una imagen incrustada en la fila del Excel.</div>
               </div>
             </div>
 
