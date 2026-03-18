@@ -44,6 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && stripos($contentType, 'application/
 }
 
 $q = trim((string)($_GET['q'] ?? ''));
+$format = strtolower(trim((string)($_GET['format'] ?? '')));
 $editId = isset($_GET['edit']) ? (int)$_GET['edit'] : 0;
 
 $edit = null;
@@ -97,6 +98,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $wantsJson) {
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(['ok' => false, 'error' => $msg], JSON_UNESCAPED_UNICODE);
     exit;
+  }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && in_array($format, ['csv', 'xlsx'], true) && !$wantsJson) {
+  try {
+    $pdo = db($config);
+    if (!catalog_supports_table($pdo)) {
+      throw new RuntimeException('No se encontró la tabla del catálogo. ¿Ejecutaste el schema.sql?');
+    }
+
+    $exportRows = catalog_export_rows(catalog_list($pdo, $userId, $q, 5000));
+    $headers = ['plu', 'producto', 'descripcion', 'unidad', 'precio', 'moneda', 'actualizado', 'creado'];
+    $stamp = date('Ymd-His');
+    $base = 'catalogo-productos-' . $stamp;
+
+    if ($format === 'csv') {
+      reports_export_csv($headers, $exportRows, $base . '.csv');
+      exit;
+    }
+
+    reports_export_xlsx('Catalogo', $headers, $exportRows, $base . '.xlsx');
+    exit;
+  } catch (Throwable $e) {
+    error_log('catalogo.php export error: ' . $e->getMessage());
+    $error = ($config['app']['env'] ?? 'production') === 'production'
+      ? 'No se pudo exportar el catálogo.'
+      : ('Error: ' . $e->getMessage());
   }
 }
 
@@ -313,6 +341,29 @@ function catalog_capitalize_first(string $value): string
     return mb_strtoupper($first, 'UTF-8') . $rest;
   }
   return strtoupper(substr($value, 0, 1)) . substr($value, 1);
+}
+
+/**
+ * @param array<int, array<string, mixed>> $rows
+ * @return array<int, array<string, string>>
+ */
+function catalog_export_rows(array $rows): array
+{
+  $out = [];
+  foreach ($rows as $r) {
+    $priceCents = (int)($r['price_cents'] ?? 0);
+    $out[] = [
+      'plu' => (string)($r['id'] ?? 0),
+      'producto' => (string)($r['name'] ?? ''),
+      'descripcion' => (string)($r['description'] ?? ''),
+      'unidad' => (string)($r['unit'] ?? ''),
+      'precio' => number_format($priceCents / 100, 2, '.', ''),
+      'moneda' => (string)($r['currency'] ?? 'ARS'),
+      'actualizado' => (string)($r['updated_at'] ?? ''),
+      'creado' => (string)($r['created_at'] ?? ''),
+    ];
+  }
+  return $out;
 }
 
 ?>
@@ -960,7 +1011,11 @@ function catalog_capitalize_first(string $value): string
             <div class="d-flex gap-2 flex-grow-1">
               <input class="form-control" id="catalogSearch" name="q" value="<?= e($q) ?>" placeholder="Buscar por producto" aria-label="Buscar" autocomplete="off">
             </div>
-            <button class="btn btn-outline-secondary btn-sm" type="submit">Buscar</button>
+            <div class="d-flex flex-wrap gap-2">
+              <a class="btn btn-outline-secondary btn-sm" href="/catalogo<?= $q !== '' ? ('?q=' . rawurlencode($q) . '&format=csv') : '?format=csv' ?>">CSV</a>
+              <a class="btn btn-outline-secondary btn-sm" href="/catalogo<?= $q !== '' ? ('?q=' . rawurlencode($q) . '&format=xlsx') : '?format=xlsx' ?>">Excel</a>
+              <button class="btn btn-outline-secondary btn-sm" type="submit">Buscar</button>
+            </div>
           </form>
 
           <div class="table-responsive">
