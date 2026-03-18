@@ -607,7 +607,11 @@ function catalog_import_collect_embedded_images(\PhpOffice\PhpSpreadsheet\Worksh
             continue;
         }
 
-        $out[$rowIndex] = catalog_import_image_from_drawing($drawing);
+        try {
+            $out[$rowIndex] = catalog_import_image_from_drawing($drawing);
+        } catch (Throwable $e) {
+            error_log('catalog import embedded image warning row ' . $rowIndex . ': ' . $e->getMessage());
+        }
     }
 
     return $out;
@@ -780,10 +784,15 @@ function catalog_import_spreadsheet(PDO $pdo, int $createdBy, array $file): arra
                 throw new InvalidArgumentException('Falta el precio.');
             }
 
-            if (isset($embeddedImages[$sheetRow])) {
-                $preparedImage = $embeddedImages[$sheetRow];
-            } elseif ($imageSource !== '') {
-                $preparedImage = catalog_import_image_from_source($imageSource);
+            try {
+                if (isset($embeddedImages[$sheetRow])) {
+                    $preparedImage = $embeddedImages[$sheetRow];
+                } elseif ($imageSource !== '') {
+                    $preparedImage = catalog_import_image_from_source($imageSource);
+                }
+            } catch (Throwable $imageError) {
+                error_log('catalog import image warning row ' . $sheetRow . ': ' . $imageError->getMessage());
+                $preparedImage = ['path' => '', 'is_new' => false];
             }
 
             $existingId = catalog_find_id_by_name($pdo, $createdBy, $name);
