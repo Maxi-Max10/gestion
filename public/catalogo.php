@@ -1365,6 +1365,7 @@ foreach ($rows as $r) {
   let importSuccessModal = null;
   let importModal = null;
   let productModal = null;
+  let importSuccessModalTimer = null;
 
   const isNetworkFetchError = (error) => {
     const message = error && error.message ? String(error.message) : String(error || '');
@@ -1390,7 +1391,17 @@ foreach ($rows as $r) {
     if (!importSuccessModal) {
       importSuccessModal = new window.bootstrap.Modal(importSuccessModalEl);
     }
+    if (importSuccessModalTimer) {
+      window.clearTimeout(importSuccessModalTimer);
+      importSuccessModalTimer = null;
+    }
     importSuccessModal.show();
+    importSuccessModalTimer = window.setTimeout(() => {
+      try {
+        importSuccessModal.hide();
+      } catch (_) {}
+      importSuccessModalTimer = null;
+    }, 2000);
   };
 
   const getImportModal = () => {
@@ -1481,7 +1492,6 @@ foreach ($rows as $r) {
       setImportFileState(null);
       hideImportModal();
       showMsg(clientSuccess, resp.message || 'Importación completada.');
-      showImportToast(resp.message || 'Importación completada.');
       showImportSuccessModal(resp.message || 'Importación completada.');
 
       const rowErrors = resp && resp.result && Array.isArray(resp.result.errors)
@@ -2246,7 +2256,6 @@ foreach ($rows as $r) {
   });
 
   if (initialImportFlash) {
-    showImportToast(initialImportFlash);
     showImportSuccessModal(initialImportFlash);
   }
 
