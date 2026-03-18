@@ -470,9 +470,177 @@ function catalog_capitalize_first(string $value): string
       gap: 1rem;
       flex-wrap: wrap;
     }
+    .import-card {
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top right, rgba(var(--accent-2-rgb), .18), transparent 32%),
+        linear-gradient(145deg, rgba(255,255,255,.96), rgba(248,250,252,.92));
+    }
+    .import-card::after {
+      content: '';
+      position: absolute;
+      inset: auto -10% -65% auto;
+      width: 320px;
+      height: 320px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(var(--accent-rgb), .12), transparent 68%);
+      pointer-events: none;
+    }
+    .import-grid {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(280px, .9fr);
+      gap: 1.25rem;
+      align-items: stretch;
+    }
+    .import-dropzone {
+      height: 100%;
+      padding: 1.15rem;
+      border-radius: 20px;
+      border: 1px solid rgba(var(--accent-rgb), .14);
+      background: linear-gradient(180deg, rgba(255,255,255,.96), rgba(244,247,251,.96));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.8);
+    }
+    .import-dropzone-head {
+      display: flex;
+      align-items: flex-start;
+      gap: .9rem;
+      margin-bottom: 1rem;
+    }
+    .import-icon {
+      width: 52px;
+      height: 52px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 16px;
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+      box-shadow: 0 14px 28px rgba(var(--accent-rgb), .26);
+      flex: 0 0 auto;
+    }
+    .import-title {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--ink);
+    }
+    .import-copy {
+      margin: .25rem 0 0;
+      color: rgba(17,24,39,.72);
+      font-size: .95rem;
+      line-height: 1.55;
+    }
+    .import-input-wrap {
+      display: grid;
+      gap: .75rem;
+    }
+    .import-input-wrap .form-control {
+      min-height: 54px;
+      border-radius: 16px;
+      border: 1px solid rgba(148,163,184,.38);
+      background: rgba(255,255,255,.96);
+      box-shadow: 0 8px 22px rgba(15,23,42,.05);
+    }
+    .import-input-wrap .form-control:hover,
+    .import-input-wrap .form-control:focus {
+      border-color: rgba(var(--accent-rgb), .35);
+      box-shadow: 0 0 0 .18rem rgba(var(--accent-rgb), .12), 0 10px 24px rgba(15,23,42,.08);
+    }
+    .import-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .55rem;
+    }
+    .import-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      padding: .45rem .72rem;
+      border-radius: 999px;
+      border: 1px solid rgba(var(--accent-rgb), .14);
+      background: rgba(var(--accent-rgb), .06);
+      color: var(--accent);
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .01em;
+    }
+    .import-side {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1.2rem;
+      border-radius: 20px;
+      color: #fff;
+      background: linear-gradient(160deg, rgba(30,58,138,.98), rgba(37,99,235,.95));
+      box-shadow: 0 22px 45px rgba(var(--accent-rgb), .24);
+    }
+    .import-side-label {
+      margin: 0;
+      font-size: .78rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,.68);
+    }
+    .import-side-title {
+      margin: .3rem 0 0;
+      font-size: 1.2rem;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+    .import-side-copy {
+      margin: .55rem 0 0;
+      color: rgba(255,255,255,.82);
+      line-height: 1.55;
+      font-size: .95rem;
+    }
+    .import-side .btn-primary {
+      min-height: 52px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(255,255,255,.98), rgba(241,245,249,.96));
+      color: var(--accent);
+      box-shadow: 0 14px 30px rgba(7, 24, 68, .22);
+    }
+    .import-side .btn-primary:hover,
+    .import-side .btn-primary:focus {
+      color: var(--accent-dark);
+      transform: translateY(-1px);
+    }
+    .import-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: .55rem;
+    }
+    .import-list li {
+      display: flex;
+      align-items: center;
+      gap: .55rem;
+      color: rgba(255,255,255,.84);
+      font-size: .92rem;
+    }
+    .import-list-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.92);
+      flex: 0 0 auto;
+    }
     @media (max-width: 576px) {
       .image-upload { grid-template-columns: 70px 1fr; }
       .image-preview { width: 70px; height: 70px; border-radius: 14px; }
+    }
+    @media (max-width: 991.98px) {
+      .import-grid {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -589,19 +757,58 @@ function catalog_capitalize_first(string $value): string
           <p class="muted-label mb-1">Carga masiva</p>
           <h2 class="h5 mb-0">Importar productos desde Excel</h2>
         </div>
-        <div class="card-body px-4 py-4">
-          <form method="post" action="/catalogo" enctype="multipart/form-data" class="row g-3 align-items-end">
+        <div class="card-body px-4 py-4 import-card">
+          <form method="post" action="/catalogo" enctype="multipart/form-data" class="import-grid">
             <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
             <input type="hidden" name="action" value="import_excel">
 
-            <div class="col-12 col-lg-7">
-              <label class="form-label" for="catalog_file">Archivo Excel</label>
-              <input class="form-control" id="catalog_file" name="catalog_file" type="file" accept=".xlsx,.xls,.csv" required>
-              <div class="form-text">Columnas esperadas en la primera fila: Producto, Precio, Unidad, Descripción y Moneda. Solo Producto y Precio son obligatorias.</div>
+            <div class="import-dropzone">
+              <div class="import-dropzone-head">
+                <span class="import-icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 3H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9z"/>
+                    <path d="M14 3v6h6"/>
+                    <path d="M9 14h6"/>
+                    <path d="M9 18h6"/>
+                    <path d="M10 10h1"/>
+                  </svg>
+                </span>
+                <div>
+                  <h3 class="import-title">Subí tu lista y cargá todo de una vez</h3>
+                  <p class="import-copy">Arrancá con un archivo Excel o CSV y el sistema crea o actualiza productos automáticamente según el nombre.</p>
+                </div>
+              </div>
+
+              <div class="import-input-wrap">
+                <div>
+                  <label class="form-label fw-semibold" for="catalog_file">Archivo Excel</label>
+                  <input class="form-control" id="catalog_file" name="catalog_file" type="file" accept=".xlsx,.xls,.csv" required>
+                </div>
+                <div class="import-chips" aria-label="Columnas esperadas">
+                  <span class="import-chip">Producto</span>
+                  <span class="import-chip">Precio</span>
+                  <span class="import-chip">Unidad</span>
+                  <span class="import-chip">Descripción</span>
+                  <span class="import-chip">Moneda</span>
+                </div>
+                <div class="form-text">La primera fila debe traer esos títulos. Solo Producto y Precio son obligatorias.</div>
+              </div>
             </div>
-            <div class="col-12 col-lg-5 d-flex flex-column gap-2">
+
+            <div class="import-side">
+              <div>
+                <p class="import-side-label">Importación inteligente</p>
+                <h3 class="import-side-title">Crea nuevos y actualiza los existentes</h3>
+                <p class="import-side-copy">Si el nombre del producto ya existe en tu catálogo, se actualizan precio, moneda, unidad y descripción con los datos del archivo.</p>
+              </div>
+
               <button type="submit" class="btn btn-primary action-btn w-100">Subir e importar</button>
-              <div class="form-text">Si un producto ya existe con el mismo nombre, se actualiza automáticamente.</div>
+
+              <ul class="import-list" aria-label="Reglas de importación">
+                <li><span class="import-list-dot" aria-hidden="true"></span>Compatible con XLSX, XLS y CSV</li>
+                <li><span class="import-list-dot" aria-hidden="true"></span>Omite filas totalmente vacías</li>
+                <li><span class="import-list-dot" aria-hidden="true"></span>Muestra aviso si alguna fila falla</li>
+              </ul>
             </div>
           </form>
         </div>
