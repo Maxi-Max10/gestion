@@ -1390,7 +1390,7 @@ foreach ($rows as $r) {
     }
     importSuccessModalBody.textContent = String(message || 'Los productos se importaron correctamente.');
     if (!importSuccessModal) {
-      importSuccessModal = new window.bootstrap.Modal(importSuccessModalEl);
+      importSuccessModal = window.bootstrap.Modal.getOrCreateInstance(importSuccessModalEl);
     }
     if (importSuccessModalTimer) {
       window.clearTimeout(importSuccessModalTimer);
@@ -1410,7 +1410,7 @@ foreach ($rows as $r) {
       return null;
     }
     if (!importModal) {
-      importModal = new window.bootstrap.Modal(importModalEl);
+      importModal = window.bootstrap.Modal.getOrCreateInstance(importModalEl);
     }
     return importModal;
   };
@@ -1420,7 +1420,7 @@ foreach ($rows as $r) {
       return null;
     }
     if (!productModal) {
-      productModal = new window.bootstrap.Modal(productModalEl);
+      productModal = window.bootstrap.Modal.getOrCreateInstance(productModalEl);
     }
     return productModal;
   };
@@ -2063,9 +2063,7 @@ foreach ($rows as $r) {
       }
       const message = pendingImportSuccessMessage;
       pendingImportSuccessMessage = '';
-      window.setTimeout(() => {
-        showImportSuccessModal(message);
-      }, 120);
+      showImportSuccessModal(message);
     });
   }
 
