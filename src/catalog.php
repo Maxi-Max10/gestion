@@ -356,6 +356,213 @@ function catalog_delete_image_file(string $imagePath): void
     }
 }
 
+function catalog_find_id_by_name(PDO $pdo, int $createdBy, string $name): int
+{
+    catalog_ensure_description_column($pdo);
+    catalog_ensure_unit_column($pdo);
+    catalog_ensure_image_column($pdo);
+
+    $name = trim($name);
+    if ($name === '') {
+        return 0;
+    }
+
+    $stmt = $pdo->prepare(
+        'SELECT id
+         FROM catalog_products
+         WHERE created_by = :created_by AND name = :name
+         LIMIT 1'
+    );
+    $stmt->execute([
+        'created_by' => $createdBy,
+        'name' => $name,
+    ]);
+
+    return (int)($stmt->fetchColumn() ?: 0);
+}
+
+function catalog_import_normalize_header(string $value): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+
+    $value = strtr($value, [
+        'Á' => 'A', 'À' => 'A', 'Â' => 'A', 'Ä' => 'A', 'á' => 'a', 'à' => 'a', 'â' => 'a', 'ä' => 'a',
+        'É' => 'E', 'È' => 'E', 'Ê' => 'E', 'Ë' => 'E', 'é' => 'e', 'è' => 'e', 'ê' => 'e', 'ë' => 'e',
+        'Í' => 'I', 'Ì' => 'I', 'Î' => 'I', 'Ï' => 'I', 'í' => 'i', 'ì' => 'i', 'î' => 'i', 'ï' => 'i',
+        'Ó' => 'O', 'Ò' => 'O', 'Ô' => 'O', 'Ö' => 'O', 'ó' => 'o', 'ò' => 'o', 'ô' => 'o', 'ö' => 'o',
+        'Ú' => 'U', 'Ù' => 'U', 'Û' => 'U', 'Ü' => 'U', 'ú' => 'u', 'ù' => 'u', 'û' => 'u', 'ü' => 'u',
+        'Ñ' => 'N', 'ñ' => 'n',
+    ]);
+    $value = function_exists('mb_strtolower') ? mb_strtolower($value, 'UTF-8') : strtolower($value);
+    $value = preg_replace('/[^a-z0-9]+/', '_', $value);
+    return trim((string)$value, '_');
+}
+
+/**
+ * @param array<int, mixed> $headerRow
+ * @return array{name:int,price:int,description:?int,unit:?int,currency:?int}
+ */
+function catalog_import_resolve_columns(array $headerRow): array
+{
+    $aliases = [
+        'name' => ['producto', 'productos', 'nombre', 'name', 'product'],
+        'price' => ['precio', 'price', 'importe', 'valor', 'monto'],
+        'description' => ['descripcion', 'descrip', 'detalle', 'description'],
+        'unit' => ['unidad', 'unidades', 'unit', 'medida'],
+        'currency' => ['moneda', 'currency', 'divisa'],
+    ];
+
+    $columns = [
+        'name' => null,
+        'price' => null,
+        'description' => null,
+        'unit' => null,
+        'currency' => null,
+    ];
+
+    foreach ($headerRow as $index => $headerCell) {
+        $header = catalog_import_normalize_header((string)$headerCell);
+        if ($header === '') {
+            continue;
+        }
+
+        foreach ($aliases as $field => $acceptedHeaders) {
+            if ($columns[$field] === null && in_array($header, $acceptedHeaders, true)) {
+                $columns[$field] = (int)$index;
+                break;
+            }
+        }
+    }
+
+    if ($columns['name'] === null || $columns['price'] === null) {
+        throw new InvalidArgumentException('El Excel debe tener al menos las columnas Producto y Precio en la primera fila.');
+    }
+
+    return $columns;
+}
+
+/**
+ * @return array{created:int,updated:int,skipped:int,errors:array<int,string>}
+ */
+function catalog_import_spreadsheet(PDO $pdo, int $createdBy, array $file): array
+{
+    catalog_ensure_description_column($pdo);
+    catalog_ensure_unit_column($pdo);
+    catalog_ensure_image_column($pdo);
+
+    if (!class_exists('PhpOffice\\PhpSpreadsheet\\IOFactory')) {
+        throw new RuntimeException('Falta instalar dependencias para importar Excel (PhpSpreadsheet).');
+    }
+
+    $errorCode = isset($file['error']) ? (int)$file['error'] : UPLOAD_ERR_NO_FILE;
+    if ($errorCode === UPLOAD_ERR_NO_FILE) {
+        throw new InvalidArgumentException('Seleccioná un archivo Excel para importar.');
+    }
+    if ($errorCode !== UPLOAD_ERR_OK) {
+        throw new RuntimeException('No se pudo subir el archivo Excel.');
+    }
+
+    $tmpName = $file['tmp_name'] ?? '';
+    if (!is_string($tmpName) || $tmpName === '' || !is_uploaded_file($tmpName)) {
+        throw new RuntimeException('El archivo Excel subido no es válido.');
+    }
+
+    $originalName = trim((string)($file['name'] ?? ''));
+    $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+    if (!in_array($extension, ['xlsx', 'xls', 'csv'], true)) {
+        throw new InvalidArgumentException('Formato no soportado. Usá un archivo XLSX, XLS o CSV.');
+    }
+
+    $size = isset($file['size']) ? (int)$file['size'] : 0;
+    if ($size <= 0) {
+        throw new InvalidArgumentException('El archivo Excel está vacío.');
+    }
+    if ($size > (8 * 1024 * 1024)) {
+        throw new InvalidArgumentException('El archivo supera 8 MB.');
+    }
+
+    try {
+        $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReaderForFile($tmpName);
+        $reader->setReadDataOnly(true);
+        $spreadsheet = $reader->load($tmpName);
+    } catch (Throwable $e) {
+        throw new RuntimeException('No se pudo leer el archivo Excel.', 0, $e);
+    }
+
+    $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
+    if (!is_array($rows) || count($rows) < 2) {
+        throw new InvalidArgumentException('El archivo no tiene filas para importar.');
+    }
+
+    $headerRow = array_shift($rows);
+    if (!is_array($headerRow)) {
+        throw new InvalidArgumentException('No se pudo leer la cabecera del archivo.');
+    }
+
+    $columns = catalog_import_resolve_columns($headerRow);
+    $created = 0;
+    $updated = 0;
+    $skipped = 0;
+    $errors = [];
+
+    foreach ($rows as $rowOffset => $row) {
+        $sheetRow = $rowOffset + 2;
+        if (!is_array($row)) {
+            $skipped++;
+            continue;
+        }
+
+        $name = trim((string)($row[$columns['name']] ?? ''));
+        $price = trim((string)($row[$columns['price']] ?? ''));
+        $description = $columns['description'] !== null ? trim((string)($row[$columns['description']] ?? '')) : '';
+        $unit = $columns['unit'] !== null ? trim((string)($row[$columns['unit']] ?? '')) : '';
+        $currency = $columns['currency'] !== null ? trim((string)($row[$columns['currency']] ?? '')) : 'ARS';
+
+        $rowValues = [$name, $price, $description, $unit, $currency];
+        $isEmptyRow = true;
+        foreach ($rowValues as $rowValue) {
+            if (trim((string)$rowValue) !== '') {
+                $isEmptyRow = false;
+                break;
+            }
+        }
+        if ($isEmptyRow) {
+            $skipped++;
+            continue;
+        }
+
+        try {
+            if ($name === '') {
+                throw new InvalidArgumentException('Falta el nombre del producto.');
+            }
+            if ($price === '') {
+                throw new InvalidArgumentException('Falta el precio.');
+            }
+
+            $existingId = catalog_find_id_by_name($pdo, $createdBy, $name);
+            if ($existingId > 0) {
+                catalog_update($pdo, $createdBy, $existingId, $name, $price, $currency, $description, $unit, null, false);
+                $updated++;
+            } else {
+                catalog_create($pdo, $createdBy, $name, $price, $currency, $description, $unit);
+                $created++;
+            }
+        } catch (Throwable $e) {
+            $errors[] = 'Fila ' . $sheetRow . ': ' . $e->getMessage();
+        }
+    }
+
+    return [
+        'created' => $created,
+        'updated' => $updated,
+        'skipped' => $skipped,
+        'errors' => $errors,
+    ];
+}
+
 /**
  * @return array<int, array{id:int,name:string,description:string,price_cents:int,currency:string,updated_at:string,created_at:string}>
  */

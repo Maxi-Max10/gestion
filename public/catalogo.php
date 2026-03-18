@@ -22,6 +22,8 @@ try {
 
 $flash = (string)($_SESSION['flash'] ?? '');
 unset($_SESSION['flash']);
+$flashError = (string)($_SESSION['flash_error'] ?? '');
+unset($_SESSION['flash_error']);
 $error = '';
 
 $accept = (string)($_SERVER['HTTP_ACCEPT'] ?? '');
@@ -201,6 +203,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
               $_SESSION['flash'] = 'Producto eliminado.';
               header('Location: /catalogo' . ($returnQ !== '' ? ('?q=' . rawurlencode($returnQ)) : ''));
+              exit;
+            }
+
+            if ($action === 'import_excel') {
+              $result = catalog_import_spreadsheet($pdo, $userId, $_FILES['catalog_file'] ?? []);
+              $summary = 'Importación completada: ' . $result['created'] . ' creados, ' . $result['updated'] . ' actualizados';
+              if ($result['skipped'] > 0) {
+                $summary .= ', ' . $result['skipped'] . ' filas vacías omitidas';
+              }
+              $summary .= '.';
+
+              if ($wantsJson) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode([
+                  'ok' => true,
+                  'message' => $summary,
+                  'result' => $result,
+                ], JSON_UNESCAPED_UNICODE);
+                exit;
+              }
+
+              $_SESSION['flash'] = $summary;
+              if (count($result['errors']) > 0) {
+                $_SESSION['flash_error'] = 'Algunas filas no se importaron: ' . implode(' | ', array_slice($result['errors'], 0, 8));
+              }
+              header('Location: /catalogo');
               exit;
             }
 
@@ -547,11 +575,37 @@ function catalog_capitalize_first(string $value): string
       <?php if ($flash !== ''): ?>
         <div class="alert alert-success" role="alert"><?= e($flash) ?></div>
       <?php endif; ?>
+      <?php if ($flashError !== ''): ?>
+        <div class="alert alert-warning" role="alert"><?= e($flashError) ?></div>
+      <?php endif; ?>
       <?php if ($error !== ''): ?>
         <div class="alert alert-danger" role="alert"><?= e($error) ?></div>
       <?php endif; ?>
       <div id="catalogClientSuccess" class="alert alert-success d-none" role="alert"></div>
       <div id="catalogClientError" class="alert alert-danger d-none" role="alert"></div>
+
+      <div class="card card-lift mb-4">
+        <div class="card-header card-header-clean bg-white px-4 py-3">
+          <p class="muted-label mb-1">Carga masiva</p>
+          <h2 class="h5 mb-0">Importar productos desde Excel</h2>
+        </div>
+        <div class="card-body px-4 py-4">
+          <form method="post" action="/catalogo" enctype="multipart/form-data" class="row g-3 align-items-end">
+            <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+            <input type="hidden" name="action" value="import_excel">
+
+            <div class="col-12 col-lg-7">
+              <label class="form-label" for="catalog_file">Archivo Excel</label>
+              <input class="form-control" id="catalog_file" name="catalog_file" type="file" accept=".xlsx,.xls,.csv" required>
+              <div class="form-text">Columnas esperadas en la primera fila: Producto, Precio, Unidad, Descripción y Moneda. Solo Producto y Precio son obligatorias.</div>
+            </div>
+            <div class="col-12 col-lg-5 d-flex flex-column gap-2">
+              <button type="submit" class="btn btn-primary action-btn w-100">Subir e importar</button>
+              <div class="form-text">Si un producto ya existe con el mismo nombre, se actualiza automáticamente.</div>
+            </div>
+          </form>
+        </div>
+      </div>
 
       <div class="card card-lift mb-4">
         <div class="card-header card-header-clean bg-white px-4 py-3">
