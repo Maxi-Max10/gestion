@@ -864,6 +864,29 @@ function catalog_export_xlsx_import_format(string $sheetName, array $rows, strin
     <div class="toast-body" id="catalogImportToastBody">Los productos se importaron correctamente.</div>
   </div>
 </div>
+<div class="modal fade" id="catalogImportSuccessModal" tabindex="-1" aria-labelledby="catalogImportSuccessModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg" style="border-radius:22px; overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg, rgba(30,58,138,.1), rgba(59,130,246,.08)); border-bottom:1px solid rgba(15,23,42,.06);">
+        <div class="d-flex align-items-center gap-2">
+          <span class="catalog-toast-icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 8.5 6.2 11.5 13 4.5" />
+            </svg>
+          </span>
+          <h5 class="modal-title mb-0" id="catalogImportSuccessModalLabel">Importación completada</h5>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body px-4 py-4">
+        <p class="mb-0" id="catalogImportSuccessModalBody">Los productos se importaron correctamente.</p>
+      </div>
+      <div class="modal-footer border-0 pt-0 px-4 pb-4">
+        <button type="button" class="btn btn-primary action-btn" data-bs-dismiss="modal">Aceptar</button>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="bg-leaves" aria-hidden="true">
   <div class="bg-leaf leaf-1"></div>
   <div class="bg-leaf leaf-2"></div>
@@ -1256,6 +1279,8 @@ foreach ($rows as $r) {
   const importSubmitBtn = importForm ? importForm.querySelector('button[type="submit"]') : null;
   const importToastEl = document.getElementById('catalogImportToast');
   const importToastBody = document.getElementById('catalogImportToastBody');
+  const importSuccessModalEl = document.getElementById('catalogImportSuccessModal');
+  const importSuccessModalBody = document.getElementById('catalogImportSuccessModalBody');
   const form = document.getElementById('catalogForm');
   const formQ = document.getElementById('catalogFormQ');
   const actionInput = document.getElementById('catalogAction');
@@ -1283,6 +1308,7 @@ foreach ($rows as $r) {
   const showMsg = (el, msg) => { if (!el) return; el.textContent = msg; el.classList.remove('d-none'); };
   const clearMsgs = () => { hideMsg(clientSuccess); hideMsg(clientError); };
   let importToast = null;
+  let importSuccessModal = null;
 
   const isNetworkFetchError = (error) => {
     const message = error && error.message ? String(error.message) : String(error || '');
@@ -1298,6 +1324,17 @@ foreach ($rows as $r) {
       importToast = new window.bootstrap.Toast(importToastEl);
     }
     importToast.show();
+  };
+
+  const showImportSuccessModal = (message) => {
+    if (!importSuccessModalEl || !importSuccessModalBody || !window.bootstrap || !window.bootstrap.Modal) {
+      return;
+    }
+    importSuccessModalBody.textContent = String(message || 'Los productos se importaron correctamente.');
+    if (!importSuccessModal) {
+      importSuccessModal = new window.bootstrap.Modal(importSuccessModalEl);
+    }
+    importSuccessModal.show();
   };
 
   const setImportFileState = (file) => {
@@ -1347,6 +1384,7 @@ foreach ($rows as $r) {
       setImportFileState(null);
       showMsg(clientSuccess, resp.message || 'Importación completada.');
       showImportToast(resp.message || 'Importación completada.');
+      showImportSuccessModal(resp.message || 'Importación completada.');
 
       const rowErrors = resp && resp.result && Array.isArray(resp.result.errors)
         ? resp.result.errors
@@ -2101,6 +2139,7 @@ foreach ($rows as $r) {
 
   if (initialImportFlash) {
     showImportToast(initialImportFlash);
+    showImportSuccessModal(initialImportFlash);
   }
 
   // Carga por voz
