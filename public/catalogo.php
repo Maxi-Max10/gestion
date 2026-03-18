@@ -1224,8 +1224,17 @@ foreach ($rows as $r) {
 
 <script>
 (() => {
-  const basePath = window.location.pathname || '/catalogo';
-  const endpoint = `${basePath}?ajax=1`;
+  const buildAjaxEndpoint = () => {
+    const action = (document.getElementById('catalogImportForm')?.getAttribute('action'))
+      || (document.getElementById('catalogForm')?.getAttribute('action'))
+      || window.location.href;
+    const url = new URL(action, window.location.href);
+    url.searchParams.set('ajax', '1');
+    url.searchParams.delete('format');
+    return url.toString();
+  };
+
+  const endpoint = buildAjaxEndpoint();
   const initialItems = <?= json_encode($initialItems, JSON_UNESCAPED_UNICODE) ?>;
   const initialImportFlash = <?= json_encode(stripos($flash, 'Importación completada') !== false ? $flash : '', JSON_UNESCAPED_UNICODE) ?>;
   let localItems = Array.isArray(initialItems) ? initialItems : [];
@@ -1274,6 +1283,11 @@ foreach ($rows as $r) {
   const showMsg = (el, msg) => { if (!el) return; el.textContent = msg; el.classList.remove('d-none'); };
   const clearMsgs = () => { hideMsg(clientSuccess); hideMsg(clientError); };
   let importToast = null;
+
+  const isNetworkFetchError = (error) => {
+    const message = error && error.message ? String(error.message) : String(error || '');
+    return error instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(message);
+  };
 
   const showImportToast = (message) => {
     if (!importToastEl || !importToastBody || !window.bootstrap || !window.bootstrap.Toast) {
@@ -1342,6 +1356,13 @@ foreach ($rows as $r) {
       }
 
       await refresh();
+    } catch (error) {
+      if (isNetworkFetchError(error) && importFileInput && importFileInput.files && importFileInput.files.length > 0) {
+        showMsg(clientError, 'No se pudo conectar para importar en segundo plano. Se enviará el formulario normal.');
+        importForm.submit();
+        return;
+      }
+      throw error;
     } finally {
       setImportBusy(false);
     }
@@ -1464,10 +1485,13 @@ foreach ($rows as $r) {
   const fetchList = async (q) => {
     if (!ajaxAvailable) return localItems;
 
-    const url = endpoint + (q ? ('&q=' + encodeURIComponent(q)) : '');
+    const url = new URL(endpoint, window.location.href);
+    if (q) {
+      url.searchParams.set('q', q);
+    }
     let res;
     try {
-      res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      res = await fetch(url.toString(), { headers: { 'Accept': 'application/json' } });
     } catch (_) {
       ajaxAvailable = false;
       return localItems;
